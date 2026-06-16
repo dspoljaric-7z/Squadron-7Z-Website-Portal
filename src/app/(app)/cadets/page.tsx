@@ -9,7 +9,7 @@ import { initials } from "@/lib/profile";
 
 export default async function CadetsPage() {
   const profile = await requireProfile();
-  if (profile.role !== "officer" && profile.role !== "nco") redirect("/dashboard");
+  if (profile.role !== "officer" && profile.role !== "snco") redirect("/dashboard");
 
   const supabase = await createClient();
   const { data: cadets } = await supabase

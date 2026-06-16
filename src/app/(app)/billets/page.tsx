@@ -18,7 +18,7 @@ export default async function BilletsPage() {
       .select("id, full_name, rank, role, avatar_url")
       .eq("active", true)
       .eq("approved", true)
-      .in("role", ["cadet", "nco", "officer"])
+      .in("role", ["cadet", "nco", "snco", "officer"])
       .order("full_name"),
   ]);
 

@@ -21,7 +21,7 @@ export default async function DashboardPage() {
         .select("*, profiles:posted_by(full_name, rank)")
         .order("created_at", { ascending: false })
         .limit(6),
-      profile.role === "officer" || profile.role === "nco"
+      profile.role === "officer" || profile.role === "snco" || profile.role === "nco"
         ? supabase
             .from("profiles")
             .select("id", { count: "exact", head: true })

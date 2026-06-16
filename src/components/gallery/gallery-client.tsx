@@ -24,7 +24,7 @@ import type { PhotoAlbum, Profile } from "@/types/database";
 export function GalleryClient({ profile, initialAlbums }: { profile: Profile; initialAlbums: PhotoAlbum[] }) {
   const [albums, setAlbums] = useState(initialAlbums);
   const [open, setOpen] = useState(false);
-  const isOfficer = profile.role === "officer";
+  const isOfficer = profile.role === "officer" || profile.role === "snco";
 
   useEffect(() => {
     const supabase = createClient();

@@ -32,7 +32,7 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editing, setEditing] = useState<DocumentRow | null>(null);
 
-  const isOfficer = profile.role === "officer";
+  const isOfficer = profile.role === "officer" || profile.role === "snco";
 
   useEffect(() => {
     const supabase = createClient();
@@ -50,7 +50,7 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
   const folders = useMemo(() => {
     const map = new Map<string, DocumentRow[]>();
     documents.forEach((d) => {
-      if (profile.role !== "officer" && d.officer_only) return;
+      if (profile.role !== "officer" && profile.role !== "snco" && d.officer_only) return;
       const list = map.get(d.folder) ?? [];
       list.push(d);
       map.set(d.folder, list);

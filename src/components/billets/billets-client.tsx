@@ -167,7 +167,7 @@ export function BilletsClient({
   const [editTarget, setEditTarget] = useState<BilletWithHolder | null | "new">(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const isOfficer = profile.role === "officer";
+  const isOfficer = profile.role === "officer" || profile.role === "snco";
 
   const filtered = billets.filter(
     (b) =>

@@ -11,7 +11,7 @@ export default async function CadetProfilePage({ params }: { params: Promise<{ i
   const [{ data: cadet }, { data: attendance }, { data: notes }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", id).single(),
     supabase.from("attendance").select("*, events(title, start_time)").eq("cadet_id", id).order("recorded_at", { ascending: false }),
-    viewer.role === "officer" || viewer.role === "nco"
+    viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco"
       ? supabase.from("staff_notes").select("*, profiles:posted_by(full_name, rank)").eq("cadet_id", id).order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
   ]);

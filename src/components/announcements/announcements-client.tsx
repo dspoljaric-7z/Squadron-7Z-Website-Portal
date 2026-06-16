@@ -39,10 +39,12 @@ export function AnnouncementsClient({
   profile,
   initialAnnouncements,
   canPost,
+  canDelete = false,
 }: {
   profile: Profile;
   initialAnnouncements: AnnouncementWithAuthor[];
   canPost: boolean;
+  canDelete?: boolean;
 }) {
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -126,9 +128,11 @@ export function AnnouncementsClient({
                   <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-[#003087]">
                     <Pencil className="h-4 w-4" />
                   </button>
-                  <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-600">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {canDelete && (
+                    <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-600">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>

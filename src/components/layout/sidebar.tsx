@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   ClipboardList,
   Award,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +37,7 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   ShieldCheck,
   ClipboardList,
   Award,
+  Layers,
 };
 
 export function Sidebar({

@@ -1,4 +1,4 @@
-export type UserRole = "cadet" | "nco" | "officer" | "parent";
+export type UserRole = "cadet" | "nco" | "snco" | "officer" | "parent";
 export type AttendanceStatus = "present" | "absent" | "excused";
 export type AnnouncementPriority = "general" | "important" | "urgent";
 export type EventType = "drill" | "training" | "ceremony" | "community_service" | "other";
@@ -15,11 +15,21 @@ export type Profile = {
   email: string | null;
   join_date: string | null;
   parent_of: string | null;
+  division_id: string | null;
   approved: boolean;
   active: boolean;
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type Division = {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export type Event = {
@@ -186,6 +196,7 @@ export interface Database {
       plan_of_day: { Row: PlanOfDay; Insert: Partial<PlanOfDay>; Update: Partial<PlanOfDay>; Relationships: [] };
       pod_templates: { Row: PodTemplate; Insert: Partial<PodTemplate>; Update: Partial<PodTemplate>; Relationships: [] };
       billets: { Row: Billet; Insert: Partial<Billet>; Update: Partial<Billet>; Relationships: [] };
+      divisions: { Row: Division; Insert: Partial<Division>; Update: Partial<Division>; Relationships: [] };
     };
     Views: Record<string, never>;
     Functions: {

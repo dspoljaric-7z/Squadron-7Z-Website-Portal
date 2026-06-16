@@ -15,7 +15,7 @@ export default async function PodPage() {
       .select("id, full_name, rank, role")
       .eq("active", true)
       .eq("approved", true)
-      .in("role", ["cadet", "nco", "officer"])
+      .in("role", ["cadet", "nco", "snco", "officer"])
       .order("full_name"),
     supabase
       .from("pod_templates")
@@ -24,7 +24,7 @@ export default async function PodPage() {
     supabase.from("site_settings").select("unit_name, motto").eq("id", 1).single(),
   ]);
 
-  const canEdit = profile.role === "officer" || profile.role === "nco";
+  const canEdit = profile.role === "officer" || profile.role === "snco";
 
   return (
     <PodClient

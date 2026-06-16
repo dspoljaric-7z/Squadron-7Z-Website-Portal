@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import type { InviteCode, Profile, SiteSettings, UserRole } from "@/types/database";
 import { format } from "date-fns";
 
-const ROLES: UserRole[] = ["cadet", "nco", "officer", "parent"];
+const ROLES: UserRole[] = ["cadet", "nco", "snco", "officer", "parent"];
 
 export function AdminClient({
   profile,

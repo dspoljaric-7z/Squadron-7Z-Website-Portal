@@ -24,7 +24,7 @@ export function AlbumClient({ profile, album, initialPhotos }: { profile: Profil
   const [lightbox, setLightbox] = useState<Photo | null>(null);
   const [editAlbumOpen, setEditAlbumOpen] = useState(false);
   const [albumMeta, setAlbumMeta] = useState(album);
-  const isOfficer = profile.role === "officer";
+  const isOfficer = profile.role === "officer" || profile.role === "snco";
 
   useEffect(() => {
     const supabase = createClient();

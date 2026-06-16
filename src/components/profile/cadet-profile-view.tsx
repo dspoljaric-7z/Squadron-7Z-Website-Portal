@@ -40,7 +40,7 @@ export function CadetProfileView({
   initialNotes: StaffNoteWithAuthor[];
 }) {
   const isOwner = viewer.id === cadet.id;
-  const isStaff = viewer.role === "officer" || viewer.role === "nco";
+  const isStaff = viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco";
   const canEditBio = isOwner || isStaff;
 
   const [bio, setBio] = useState(cadet.bio ?? "");

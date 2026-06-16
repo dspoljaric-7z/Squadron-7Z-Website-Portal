@@ -16,7 +16,7 @@ export default async function MyProfilePage() {
     );
   }
 
-  if (viewer.role === "officer" || viewer.role === "nco") redirect(`/cadets/${viewer.id}`);
+  if (viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco") redirect(`/cadets/${viewer.id}`);
 
   const [{ data: cadet }, { data: attendance }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", targetId).single(),

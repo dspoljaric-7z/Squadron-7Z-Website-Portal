@@ -11,7 +11,7 @@ export default async function CalendarPage() {
     .select("*")
     .order("start_time", { ascending: true });
 
-  const canEdit = profile.role === "officer" || profile.role === "nco";
+  const canEdit = profile.role === "officer" || profile.role === "snco";
 
   return <CalendarClient initialEvents={events ?? []} canEdit={canEdit} />;
 }

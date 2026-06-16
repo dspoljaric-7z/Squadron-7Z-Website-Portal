@@ -62,7 +62,7 @@ export function DashboardClient({
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
 
-  const isStaff = profile.role === "officer" || profile.role === "nco";
+  const isStaff = profile.role === "officer" || profile.role === "snco" || profile.role === "nco";
 
   useEffect(() => {
     const supabase = createClient();
@@ -256,12 +256,12 @@ export function DashboardClient({
             >
               <Plus className="h-4 w-4" /> Edit POD
             </Link>
-            {profile.role === "officer" && (
+            {(profile.role === "officer" || profile.role === "snco") && (
               <Link
-                href="/admin"
+                href={profile.role === "officer" ? "/admin" : "/divisions"}
                 className="flex items-center gap-1.5 rounded-lg border border-[#B8860B]/20 bg-[#B8860B]/5 px-3 py-2 text-sm font-medium text-[#B8860B] transition-colors hover:bg-[#B8860B]/10"
               >
-                <UserCheck className="h-4 w-4" /> Manage Members
+                <UserCheck className="h-4 w-4" /> {profile.role === "officer" ? "Manage Members" : "Divisions"}
               </Link>
             )}
           </div>
