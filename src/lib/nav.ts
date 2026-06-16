@@ -1,0 +1,39 @@
+import type { UserRole } from "@/types/database";
+
+export type NavIconName =
+  | "LayoutDashboard"
+  | "CalendarDays"
+  | "Megaphone"
+  | "ClipboardCheck"
+  | "Users"
+  | "User"
+  | "FolderOpen"
+  | "Images"
+  | "ShieldCheck"
+  | "ClipboardList"
+  | "Award";
+
+export interface NavItem {
+  href: string;
+  label: string;
+  iconName: NavIconName;
+  roles?: UserRole[];
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard" },
+  { href: "/calendar", label: "Calendar", iconName: "CalendarDays" },
+  { href: "/announcements", label: "Announcements", iconName: "Megaphone" },
+  { href: "/pod", label: "Plan of the Day", iconName: "ClipboardList", roles: ["officer", "nco", "cadet"] },
+  { href: "/billets", label: "Billets", iconName: "Award", roles: ["officer", "nco", "cadet"] },
+  { href: "/attendance", label: "Attendance", iconName: "ClipboardCheck", roles: ["officer", "nco"] },
+  { href: "/cadets", label: "Cadets", iconName: "Users", roles: ["officer", "nco"] },
+  { href: "/profile", label: "My Profile", iconName: "User", roles: ["cadet", "parent"] },
+  { href: "/documents", label: "Documents", iconName: "FolderOpen", roles: ["officer", "nco", "cadet"] },
+  { href: "/gallery", label: "Photo Gallery", iconName: "Images", roles: ["officer", "nco", "cadet"] },
+  { href: "/admin", label: "Admin", iconName: "ShieldCheck", roles: ["officer"] },
+];
+
+export function navForRole(role: UserRole): NavItem[] {
+  return NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role));
+}

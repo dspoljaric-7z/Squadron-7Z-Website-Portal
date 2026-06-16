@@ -1,101 +1,155 @@
+import Link from "next/link";
 import Image from "next/image";
+import { createClient } from "@/lib/supabase/server";
+import { Anchor, Shield, Users, ChevronRight } from "lucide-react";
 
-export default function Home() {
+export default async function LandingPage() {
+  const supabase = await createClient();
+  const { data: settings } = await supabase
+    .from("site_settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  const unitName = settings?.unit_name ?? "Squadron 7-Zulu & TS Wasp";
+  const motto = settings?.motto ?? "Honor, Courage, Commitment, Service";
+  const logoUrl = settings?.logo_url;
+
+  const values = motto.split(",").map((v: string) => v.trim());
+
+  const { count: memberCount } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("active", true)
+    .eq("approved", true);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#001a4d]">
+      {/* Background decoration */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -right-64 -top-64 h-[600px] w-[600px] rounded-full bg-[#003087]/40 blur-3xl" />
+        <div className="absolute -bottom-32 -left-32 h-[400px] w-[400px] rounded-full bg-[#B8860B]/10 blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px), repeating-linear-gradient(90deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px)",
+          }}
         />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between px-6 py-4 sm:px-10">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#B8860B]">
+            <Anchor className="h-4 w-4 text-white" />
+          </div>
+          <span className="hidden text-sm font-semibold text-white/70 sm:block">NSCC</span>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/register"
+            className="text-sm font-medium text-white/70 transition-colors hover:text-white"
+          >
+            Register
+          </Link>
+          <Link
+            href="/login"
+            className="flex items-center gap-1.5 rounded-full bg-[#B8860B] px-4 py-1.5 text-sm font-semibold text-white transition-all hover:bg-[#9a7009]"
+          >
+            Sign In <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Hero content */}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+        {/* Logo / anchor */}
+        <div className="mb-8 flex h-28 w-28 items-center justify-center rounded-full border-2 border-[#B8860B]/50 bg-[#003087]/60 ring-4 ring-[#B8860B]/20">
+          {logoUrl ? (
+            <Image
+              src={logoUrl}
+              alt={`${unitName} logo`}
+              width={80}
+              height={80}
+              className="rounded-full object-cover"
+            />
+          ) : (
+            <Anchor className="h-14 w-14 text-[#B8860B]" />
+          )}
+        </div>
+
+        {/* Label */}
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-[#B8860B]">
+          U.S. Naval Sea Cadet Corps
+        </p>
+
+        {/* Unit name */}
+        <h1 className="mb-4 max-w-2xl text-4xl font-extrabold leading-tight text-white sm:text-5xl lg:text-6xl">
+          {unitName}
+        </h1>
+
+        {/* Motto */}
+        <p className="mb-10 max-w-xl text-lg italic text-white/60 sm:text-xl">
+          &ldquo;{motto}&rdquo;
+        </p>
+
+        {/* Core values chips */}
+        <div className="mb-12 flex flex-wrap justify-center gap-2">
+          {values.map((v: string) => (
+            <span
+              key={v}
+              className="rounded-full border border-[#B8860B]/40 bg-[#B8860B]/10 px-4 py-1.5 text-sm font-semibold text-[#B8860B]"
+            >
+              {v}
+            </span>
+          ))}
+        </div>
+
+        {/* CTAs */}
+        <div className="flex flex-col items-center gap-3 sm:flex-row">
+          <Link
+            href="/login"
+            className="flex min-w-[160px] items-center justify-center gap-2 rounded-full bg-[#B8860B] px-8 py-3 text-base font-bold text-white shadow-lg transition-all hover:bg-[#9a7009] hover:shadow-xl"
+          >
+            <Shield className="h-4 w-4" />
+            Member Login
+          </Link>
+          <Link
+            href="/register"
+            className="flex min-w-[160px] items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-8 py-3 text-base font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20"
+          >
+            <Users className="h-4 w-4" />
+            Join Our Unit
+          </Link>
+        </div>
+
+        {/* Stats */}
+        {(memberCount ?? 0) > 0 && (
+          <div className="mt-16 flex items-center gap-8 text-center">
+            <div>
+              <p className="text-3xl font-extrabold text-white">{memberCount}</p>
+              <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-white/40">
+                Active Members
+              </p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div>
+              <p className="text-3xl font-extrabold text-white">NSCC</p>
+              <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-white/40">
+                Excellence in Service
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom footer */}
+      <div className="relative z-10 border-t border-white/5 px-6 py-4 text-center">
+        <p className="text-xs text-white/25">
+          Secured member portal &middot; {unitName} &middot; U.S. Naval Sea Cadet Corps
+        </p>
+      </div>
+    </main>
   );
 }
