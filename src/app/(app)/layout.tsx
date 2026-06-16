@@ -44,10 +44,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <GlobalNotifications profileId={profile.id} />
-      <Sidebar items={items} unitName={unitName} role={profile.role} initialPendingCount={pendingCount} />
+      <Sidebar items={items} unitName={unitName} role={profile.role} fullName={profile.full_name} initialPendingCount={pendingCount} />
       <div className="flex flex-1 flex-col">
         <Header profile={profile} unitName={unitName} />
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 pb-20 sm:p-6 md:pb-6">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-[#f3f5f8] p-4 pb-20 sm:p-6 md:pb-6">{children}</main>
       </div>
       <MobileNav items={items} role={profile.role} initialPendingCount={pendingCount} />
     </div>

@@ -67,28 +67,31 @@ export function MobileNav({
   }, [role]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t bg-white md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-white/5 bg-[#060e1e] md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       {visible.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + "/");
+        const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
         const Icon = ICONS[item.iconName];
         return (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              "relative flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium",
-              active ? "text-[#003087]" : "text-gray-400"
+              "relative flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+              active ? "text-[#B8860B]" : "text-white/30"
             )}
           >
+            {active && (
+              <span className="absolute top-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-b bg-[#B8860B]" />
+            )}
             <span className="relative">
               <Icon className="h-5 w-5" />
               {item.href === "/admin" && pendingCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#B8860B] px-1 text-[8px] font-bold text-white">
+                <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#B8860B] px-1 text-[8px] font-bold text-black">
                   {pendingCount}
                 </span>
               )}
             </span>
-            {item.label}
+            <span className="leading-none">{item.label.split(" ")[0]}</span>
           </Link>
         );
       })}

@@ -9,6 +9,53 @@
   }
 }
 
+/* ── Wave animation for auth pages ── */
+@keyframes wave-drift-1 {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes wave-drift-2 {
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+@keyframes wave-drift-3 {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes float-anchor {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+.wave-layer {
+  position: absolute;
+  bottom: 0;
+  width: 200%;
+  height: 100%;
+  background-repeat: repeat-x;
+  background-size: 50% auto;
+  background-position: 0 bottom;
+}
+.wave-1 { animation: wave-drift-1 14s linear infinite; opacity: 0.25; }
+.wave-2 { animation: wave-drift-2 10s linear infinite; opacity: 0.15; }
+.wave-3 { animation: wave-drift-3 18s linear infinite; opacity: 0.08; }
+
+.anchor-float { animation: float-anchor 4s ease-in-out infinite; }
+
+/* ── Sidebar nav glow ── */
+.nav-active-glow {
+  box-shadow: inset 3px 0 0 #B8860B, 0 0 16px rgba(184,134,11,0.08);
+}
+
+/* ── Smooth scroll ── */
+html { scroll-behavior: smooth; }
+
+/* ── Better focus ring ── */
+*:focus-visible {
+  outline: 2px solid #B8860B;
+  outline-offset: 2px;
+}
+
 @layer base {
   .theme {
     --font-heading: var(--font-sans);

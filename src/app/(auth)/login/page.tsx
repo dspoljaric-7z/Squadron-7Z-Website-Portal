@@ -8,7 +8,10 @@ export default async function LoginPage({
   const params = await searchParams;
   return (
     <>
-      <h2 className="mb-6 text-center text-lg font-semibold">Sign In</h2>
+      <div className="mb-6 text-center">
+        <h2 className="text-xl font-bold text-gray-900">Welcome back</h2>
+        <p className="mt-1 text-sm text-gray-400">Sign in to access your squadron portal</p>
+      </div>
       <LoginForm registered={params.registered === "1"} />
     </>
   );
