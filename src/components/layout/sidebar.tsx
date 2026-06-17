@@ -18,6 +18,7 @@ import {
   ClipboardList,
   Award,
   Layers,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -39,6 +40,7 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   ClipboardList,
   Award,
   Layers,
+  Network,
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -54,12 +56,14 @@ export function Sidebar({
   unitName,
   role,
   fullName,
+  title,
   initialPendingCount = 0,
 }: {
   items: NavItem[];
   unitName: string;
   role?: UserRole;
   fullName?: string;
+  title?: string | null;
   initialPendingCount?: number;
 }) {
   const pathname = usePathname();
@@ -82,10 +86,10 @@ export function Sidebar({
   }, [role]);
 
   return (
-    <aside className="hidden w-64 flex-col bg-[#060e1e] md:flex" style={{ borderRight: "1px solid rgba(255,255,255,0.05)" }}>
+    <aside className="hidden w-64 flex-col bg-[#0d1f3c] md:flex" style={{ borderRight: "1px solid rgba(255,255,255,0.06)" }}>
 
       {/* Logo */}
-      <div className="px-5 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="px-5 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div className="flex items-center gap-3">
           <div
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
@@ -139,11 +143,14 @@ export function Sidebar({
       </nav>
 
       {/* User + logout */}
-      <div className="px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         {role && (
           <div className="mb-2 px-3 py-2">
-            <p className="truncate text-[13px] font-medium text-white/60">{fullName ?? "Member"}</p>
-            <p className={cn("text-[11px] font-semibold uppercase tracking-wider", ROLE_COLORS[role] ?? "text-white/40")}>
+            <p className="truncate text-[13px] font-medium text-white/70">{fullName ?? "Member"}</p>
+            {title && (
+              <p className="truncate text-[11px] text-white/45">{title}</p>
+            )}
+            <p className={cn("text-[11px] font-semibold uppercase tracking-wider mt-0.5", ROLE_COLORS[role] ?? "text-white/40")}>
               {roleLabel(role)}
             </p>
           </div>

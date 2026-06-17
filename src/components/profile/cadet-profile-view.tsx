@@ -130,7 +130,7 @@ export function CadetProfileView({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-[#003087]">Cadet Profile</h1>
+        <h1 className="text-xl font-bold text-gray-900">{isOwner ? "My Profile" : "Cadet Profile"}</h1>
         <LiveIndicator />
       </div>
 

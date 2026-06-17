@@ -12,7 +12,8 @@ export type NavIconName =
   | "ShieldCheck"
   | "ClipboardList"
   | "Award"
-  | "Layers";
+  | "Layers"
+  | "Network";
 
 export interface NavItem {
   href: string;
@@ -30,6 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard" },
   { href: "/calendar", label: "Calendar", iconName: "CalendarDays" },
   { href: "/announcements", label: "Announcements", iconName: "Megaphone" },
+  { href: "/chain-of-command", label: "Chain of Command", iconName: "Network" },
   { href: "/pod", label: "Plan of the Day", iconName: "ClipboardList", roles: ["officer", "snco", "cadet"] },
   { href: "/billets", label: "Billets", iconName: "Award", roles: ["officer", "snco", "cadet"] },
   { href: "/attendance", label: "Attendance", iconName: "ClipboardCheck", roles: ["officer", "snco", "nco"] },

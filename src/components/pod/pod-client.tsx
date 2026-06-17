@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { format, addDays, subDays, parseISO } from "date-fns";
+import { format, subDays, parseISO } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
@@ -201,6 +201,7 @@ export function PodClient({
   initialTemplates,
   unitName,
   motto,
+  initialAllDates,
 }: {
   initialPod: PlanOfDay | null;
   initialDate: string;
@@ -209,6 +210,7 @@ export function PodClient({
   initialTemplates: PodTemplate[];
   unitName: string;
   motto: string;
+  initialAllDates: string[];
 }) {
   const [date, setDate] = useState(initialDate);
   const [pod, setPod] = useState<PlanOfDay | null>(initialPod);
@@ -218,6 +220,9 @@ export function PodClient({
   const [templates, setTemplates] = useState<PodTemplate[]>(initialTemplates);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [allDates, setAllDates] = useState<string[]>(initialAllDates);
+  const [showNewDrillPicker, setShowNewDrillPicker] = useState(false);
+  const [newDrillDate, setNewDrillDate] = useState("");
 
   // Edit state
   const [uniformOfDay, setUniformOfDay] = useState(initialPod?.uniform_of_day ?? "");
@@ -243,11 +248,25 @@ export function PodClient({
     setLoading(false);
   }, []);
 
-  const goDay = (delta: number) => {
-    const d = parseISO(date);
-    const next = format(delta > 0 ? addDays(d, 1) : subDays(d, 1), "yyyy-MM-dd");
-    setDate(next);
-    loadDate(next);
+  const goToDrillDate = (target: string) => {
+    setDate(target);
+    loadDate(target);
+  };
+
+  const drillIdx = allDates.indexOf(date);
+  const prevDrillDate = drillIdx > 0 ? allDates[drillIdx - 1] : null;
+  const nextDrillDate = drillIdx >= 0 && drillIdx < allDates.length - 1 ? allDates[drillIdx + 1] : null;
+
+  const openNewDrill = (targetDate: string) => {
+    setDate(targetDate);
+    setPod(null);
+    setItems([]);
+    setUniformOfDay("");
+    setWatchBill("");
+    setNotes("");
+    setEditing(true);
+    setShowNewDrillPicker(false);
+    setNewDrillDate("");
   };
 
   // ── Item manipulation ─────────────────────────────────────────────────────
@@ -311,6 +330,9 @@ export function PodClient({
       setPod(res.data as PlanOfDay);
       toast.success("Plan of the Day saved");
       setEditing(false);
+      if (!pod) {
+        setAllDates((prev) => [...prev, date].sort());
+      }
     }
     setSaving(false);
   };
@@ -376,7 +398,8 @@ export function PodClient({
   // ── Render helpers ────────────────────────────────────────────────────────
 
   const displayDate = parseISO(date);
-  const isToday = date === initialDate;
+  const todayStr = new Date().toISOString().split("T")[0];
+  const isToday = date === todayStr;
   const sortedItems = [...(editing ? items : (pod?.items ?? []))].sort((a, b) => a.time.localeCompare(b.time));
   const hasContent = (pod?.items?.length ?? 0) > 0 || pod?.uniform_of_day || pod?.watch_bill || pod?.notes;
 
@@ -428,32 +451,91 @@ export function PodClient({
         </div>
 
         {/* ── Date navigator ── */}
-        <div className="print-hide flex items-center justify-between rounded-xl border bg-white px-4 py-3 shadow-sm">
-          <button
-            onClick={() => goDay(-1)}
-            disabled={editing || loading}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border text-gray-500 hover:bg-gray-50 disabled:opacity-40"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="text-center">
-            <div className="flex items-center gap-2 font-bold text-[#003087]">
-              <CalendarDays className="h-4 w-4" />
-              {format(displayDate, "EEEE, MMMM d, yyyy")}
-            </div>
-            {isToday && (
-              <span className="mt-0.5 inline-block rounded-full bg-[#003087]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#003087]">
-                Today
-              </span>
+        <div className="print-hide rounded-xl border bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button
+              onClick={() => prevDrillDate && goToDrillDate(prevDrillDate)}
+              disabled={!prevDrillDate || editing || loading}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={prevDrillDate ? `Go to ${format(parseISO(prevDrillDate), "MMM d")}` : "No earlier drill days"}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            {allDates.length > 0 ? (
+              <div className="flex flex-1 items-center justify-center gap-2 min-w-0">
+                <CalendarDays className="h-4 w-4 shrink-0 text-[#003087]" />
+                <select
+                  value={allDates.includes(date) ? date : ""}
+                  onChange={(e) => e.target.value && goToDrillDate(e.target.value)}
+                  disabled={editing || loading}
+                  className="min-w-0 flex-1 truncate bg-transparent text-center font-bold text-[#003087] focus:outline-none disabled:opacity-60 cursor-pointer"
+                >
+                  {allDates.map((d) => (
+                    <option key={d} value={d}>
+                      {format(parseISO(d), "EEE, MMM d, yyyy")}{d === todayStr ? " — Today" : ""}
+                    </option>
+                  ))}
+                  {!allDates.includes(date) && (
+                    <option value={date}>{format(displayDate, "EEE, MMM d, yyyy")} (new)</option>
+                  )}
+                </select>
+                {isToday && (
+                  <span className="shrink-0 rounded-full bg-[#003087]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#003087]">
+                    Today
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center gap-2">
+                <CalendarDays className="h-4 w-4 text-gray-300" />
+                <span className="text-sm text-gray-400">No drill days yet</span>
+              </div>
             )}
+
+            <button
+              onClick={() => nextDrillDate && goToDrillDate(nextDrillDate)}
+              disabled={!nextDrillDate || editing || loading}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={nextDrillDate ? `Go to ${format(parseISO(nextDrillDate), "MMM d")}` : "No later drill days"}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={() => goDay(1)}
-            disabled={editing || loading}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border text-gray-500 hover:bg-gray-50 disabled:opacity-40"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+
+          {canEdit && (
+            <div className="border-t bg-gray-50/50 px-4 py-2">
+              {showNewDrillPicker ? (
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" />
+                  <input
+                    type="date"
+                    value={newDrillDate}
+                    onChange={(e) => setNewDrillDate(e.target.value)}
+                    className="flex-1 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!newDrillDate}
+                    onClick={() => newDrillDate && openNewDrill(newDrillDate)}
+                    className="bg-[#003087] hover:bg-[#002266]"
+                  >
+                    Create
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setShowNewDrillPicker(false); setNewDrillDate(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowNewDrillPicker(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#003087] hover:text-[#002266] transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" /> New Drill Day
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {loading && (

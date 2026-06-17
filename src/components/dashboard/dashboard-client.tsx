@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LiveIndicator } from "@/components/shared/live-indicator";
 import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/format";
-import type { Announcement, Event, PlanOfDay, Profile } from "@/types/database";
+import type { Announcement, Attendance, Event, PlanOfDay, Profile } from "@/types/database";
 import {
   CalendarDays,
   Megaphone,
@@ -21,11 +21,16 @@ import {
   MapPin,
   Plus,
   ClipboardCheck,
+  TrendingUp,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
 
 type AnnouncementWithAuthor = Announcement & {
   profiles: { full_name: string; rank: string | null } | null;
+};
+
+type AttendanceWithEvent = Attendance & {
+  events: { title: string; start_time: string } | null;
 };
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
@@ -50,6 +55,8 @@ export function DashboardClient({
   initialPendingCount,
   memberCount,
   todayPod,
+  linkedCadet = null,
+  cadetAttendance = null,
 }: {
   profile: Profile;
   initialEvents: Event[];
@@ -57,6 +64,8 @@ export function DashboardClient({
   initialPendingCount: number;
   memberCount: number;
   todayPod: PlanOfDay | null;
+  linkedCadet?: Profile | null;
+  cadetAttendance?: AttendanceWithEvent[] | null;
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
@@ -102,6 +111,134 @@ export function DashboardClient({
 
   const urgent = announcements.filter((a) => a.priority === "urgent");
   const firstName = profile.full_name.split(" ")[0];
+
+  // Parent-specific view
+  if (profile.role === "parent") {
+    const att = cadetAttendance ?? [];
+    const total = att.length;
+    const present = att.filter((a) => a.status === "present").length;
+    const pct = total > 0 ? Math.round((present / total) * 100) : null;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold text-[#003087] sm:text-3xl">Family Portal</h1>
+            <p className="mt-0.5 text-sm text-gray-500">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          </div>
+          <LiveIndicator />
+        </div>
+
+        {linkedCadet ? (
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-400">Your Cadet</p>
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#003087] text-lg font-bold text-white">
+                {linkedCadet.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-lg font-bold text-gray-900">{linkedCadet.full_name}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {linkedCadet.rank && <span className="text-sm font-bold text-[#B8860B]">{linkedCadet.rank}</span>}
+                  {linkedCadet.billet && <span className="text-sm text-gray-500">{linkedCadet.billet}</span>}
+                </div>
+                {linkedCadet.join_date && (
+                  <p className="text-xs text-gray-400 mt-0.5">Joined {format(new Date(linkedCadet.join_date), "MMMM yyyy")}</p>
+                )}
+              </div>
+              {pct !== null && (
+                <div className="text-right shrink-0">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <TrendingUp className="h-4 w-4 text-green-600" />
+                    <span className="text-3xl font-extrabold text-[#003087]">{pct}%</span>
+                  </div>
+                  <p className="text-xs text-gray-400">attendance</p>
+                  <p className="text-xs text-gray-300">{present}/{total} events</p>
+                </div>
+              )}
+            </div>
+
+            {att.length > 0 && (
+              <div className="mt-4 border-t pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Recent Attendance</p>
+                <div className="space-y-1">
+                  {att.slice(0, 5).map((a) => (
+                    <div key={a.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 truncate">{a.events?.title ?? "Event"}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {a.events && <span className="text-xs text-gray-400">{format(new Date(a.events.start_time), "MMM d")}</span>}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          a.status === "present" ? "bg-green-100 text-green-700" :
+                          a.status === "excused" ? "bg-blue-100 text-blue-700" :
+                          "bg-red-100 text-red-700"
+                        }`}>{a.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed bg-white p-8 text-center">
+            <p className="text-sm text-gray-400">No cadet linked to your account yet.</p>
+            <p className="mt-1 text-xs text-gray-300">Contact a Squadron Officer to link your cadet.</p>
+          </div>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Upcoming Events */}
+          <div className="rounded-xl border bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="font-semibold text-gray-800">Upcoming Events</h2>
+              <a href="/calendar" className="text-xs font-medium text-[#003087] hover:underline">View all →</a>
+            </div>
+            <div className="divide-y">
+              {events.length === 0 && <p className="px-4 py-6 text-center text-sm text-gray-400">No upcoming events.</p>}
+              {events.slice(0, 4).map((evt) => (
+                <div key={evt.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="mt-0.5 flex w-12 shrink-0 flex-col items-center rounded-lg border border-[#003087]/10 bg-[#003087]/5 py-1.5 text-center">
+                    <span className="text-[10px] font-bold uppercase text-[#003087]/50">{format(new Date(evt.start_time), "MMM")}</span>
+                    <span className="text-lg font-extrabold leading-none text-[#003087]">{format(new Date(evt.start_time), "d")}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-semibold text-gray-800">{evt.title}</p>
+                    <p className="mt-0.5 text-xs text-gray-400 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {eventDateLabel(evt.start_time)}, {format(new Date(evt.start_time), "h:mm a")}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Announcements */}
+          <div className="rounded-xl border bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="font-semibold text-gray-800">Announcements</h2>
+              <a href="/announcements" className="text-xs font-medium text-[#003087] hover:underline">View all →</a>
+            </div>
+            <div className="divide-y">
+              {announcements.length === 0 && <p className="px-4 py-6 text-center text-sm text-gray-400">No announcements.</p>}
+              {announcements.slice(0, 4).map((a) => (
+                <div key={a.id} className={`border-l-4 px-4 py-3 ${
+                  a.priority === "urgent" ? "border-l-red-500 bg-red-50/40" :
+                  a.priority === "important" ? "border-l-amber-400 bg-amber-50/30" :
+                  "border-l-transparent"
+                }`}>
+                  <p className="font-semibold text-gray-800 text-sm">{a.title}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

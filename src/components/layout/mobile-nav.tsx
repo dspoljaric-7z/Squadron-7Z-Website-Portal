@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Award,
   Layers,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -35,6 +36,7 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   ClipboardList,
   Award,
   Layers,
+  Network,
 };
 
 export function MobileNav({
@@ -67,7 +69,7 @@ export function MobileNav({
   }, [role]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-white/5 bg-[#060e1e] md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-white/5 bg-[#0d1f3c] md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       {visible.map((item) => {
         const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
         const Icon = ICONS[item.iconName];

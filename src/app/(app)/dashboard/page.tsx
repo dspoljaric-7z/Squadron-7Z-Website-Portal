@@ -35,6 +35,23 @@ export default async function DashboardPage() {
       supabase.from("plan_of_day").select("*").eq("date", today).maybeSingle(),
     ]);
 
+  // For parents, fetch their linked cadet's profile + recent attendance
+  let linkedCadet = null;
+  let cadetAttendance = null;
+  if (profile.role === "parent" && profile.parent_of) {
+    const [cadetRes, attendanceRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", profile.parent_of).single(),
+      supabase
+        .from("attendance")
+        .select("*, events(title, start_time)")
+        .eq("cadet_id", profile.parent_of)
+        .order("recorded_at", { ascending: false })
+        .limit(15),
+    ]);
+    linkedCadet = cadetRes.data ?? null;
+    cadetAttendance = (attendanceRes.data ?? null) as never;
+  }
+
   return (
     <DashboardClient
       profile={profile}
@@ -43,6 +60,8 @@ export default async function DashboardPage() {
       initialPendingCount={pendingRes.count ?? 0}
       memberCount={memberCountRes.count ?? 0}
       todayPod={podRes.data ?? null}
+      linkedCadet={linkedCadet}
+      cadetAttendance={cadetAttendance}
     />
   );
 }
