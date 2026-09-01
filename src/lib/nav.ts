@@ -80,7 +80,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin",           label: "Admin",              iconName: "ShieldCheck",     roles: ["officer"] },
 
   // Cadet only
-  { href: "/my-record",       label: "My Record",          iconName: "BookOpen",        roles: ["cadet", "nco"] },
   { href: "/profile",         label: "My Profile",         iconName: "User",            roles: ["cadet"] },
   { href: "/documents",       label: "Documents",          iconName: "FolderOpen",      roles: ["officer","snco","nco","cadet"] },
 
