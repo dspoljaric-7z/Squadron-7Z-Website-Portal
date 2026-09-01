@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/select";
 import { PRIORITY_COLORS } from "@/lib/constants";
 import type { Announcement, AnnouncementPriority, Profile } from "@/types/database";
-import { Pencil, Plus, Trash2, Image as ImageIcon } from "lucide-react";
+import { Pencil, Plus, Trash2, Image as ImageIcon, CheckCheck } from "lucide-react";
+import { isStaff } from "@/lib/permissions";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,46 @@ export function AnnouncementsClient({
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AnnouncementWithAuthor | null>(null);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [readCounts, setReadCounts] = useState<Record<string, number>>({});
+  const isStaffMember = isStaff(profile);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("announcement_reads")
+      .select("announcement_id")
+      .eq("profile_id", profile.id)
+      .then(({ data }) => {
+        if (data) setReadIds(new Set(data.map((r) => r.announcement_id)));
+      });
+
+    if (isStaffMember) {
+      supabase
+        .from("announcement_reads")
+        .select("announcement_id")
+        .then(({ data }) => {
+          if (data) {
+            const counts: Record<string, number> = {};
+            for (const r of data) counts[r.announcement_id] = (counts[r.announcement_id] ?? 0) + 1;
+            setReadCounts(counts);
+          }
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  const acknowledge = async (announcementId: string) => {
+    if (readIds.has(announcementId)) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("announcement_reads").insert({
+      announcement_id: announcementId,
+      profile_id: profile.id,
+    });
+    if (error) { toast.error("Failed to acknowledge"); return; }
+    setReadIds((prev) => { const next = new Set(prev); next.add(announcementId); return next; });
+    setReadCounts((prev) => ({ ...prev, [announcementId]: (prev[announcementId] ?? 0) + 1 }));
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -103,41 +144,68 @@ export function AnnouncementsClient({
 
       <div className="space-y-3">
         {announcements.length === 0 && <p className="text-sm text-gray-400">No announcements yet.</p>}
-        {announcements.map((a) => (
-          <Card key={a.id} className={cn("p-4", a.priority === "urgent" && "border-red-300 bg-red-50")}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <h3 className="font-semibold">{a.title}</h3>
-                  {a.priority !== "general" && (
-                    <Badge className={cn("capitalize", PRIORITY_COLORS[a.priority])}>{a.priority}</Badge>
+        {announcements.map((a) => {
+          const needsAck = a.priority === "urgent" || a.priority === "important";
+          const acked = readIds.has(a.id);
+          const count = readCounts[a.id] ?? 0;
+          return (
+            <Card key={a.id} className={cn("p-4", a.priority === "urgent" && "border-red-300 bg-red-50")}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <h3 className="font-semibold">{a.title}</h3>
+                    {a.priority !== "general" && (
+                      <Badge className={cn("capitalize", PRIORITY_COLORS[a.priority])}>{a.priority}</Badge>
+                    )}
+                    {isStaffMember && needsAck && (
+                      <span className="ml-auto text-xs text-gray-400 flex items-center gap-1">
+                        <CheckCheck className="h-3 w-3" />
+                        {count} acknowledged
+                      </span>
+                    )}
+                  </div>
+                  <p className="mb-2 text-xs text-gray-400">
+                    {a.profiles?.full_name ?? "Staff"} &middot; {format(new Date(a.created_at), "MMM d, yyyy 'at' h:mm a")}
+                    {a.updated_at !== a.created_at && " (edited)"}
+                  </p>
+                  {a.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.image_url} alt="" className="mb-2 max-h-64 rounded-md object-cover" />
+                  )}
+                  <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: a.body }} />
+                  {needsAck && !isStaffMember && (
+                    <div className="mt-3">
+                      {acked ? (
+                        <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                          <CheckCheck className="h-3.5 w-3.5" /> Acknowledged
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => acknowledge(a.id)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-[#003087] px-3 py-1 text-xs font-semibold text-white hover:bg-[#002266] transition-colors"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" /> Acknowledge
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-                <p className="mb-2 text-xs text-gray-400">
-                  {a.profiles?.full_name ?? "Staff"} &middot; {format(new Date(a.created_at), "MMM d, yyyy 'at' h:mm a")}
-                  {a.updated_at !== a.created_at && " (edited)"}
-                </p>
-                {a.image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.image_url} alt="" className="mb-2 max-h-64 rounded-md object-cover" />
-                )}
-                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: a.body }} />
-              </div>
-              {canPost && (
-                <div className="flex shrink-0 gap-1">
-                  <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-[#003087]">
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  {canDelete && (
-                    <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
+                {canPost && (
+                  <div className="flex shrink-0 gap-1">
+                    <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-[#003087]">
+                      <Pencil className="h-4 w-4" />
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </Card>
-        ))}
+                    {canDelete && (
+                      <button onClick={() => remove(a.id)} className="text-gray-400 hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

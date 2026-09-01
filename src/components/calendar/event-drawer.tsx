@@ -22,7 +22,7 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { EVENT_TYPE_LABELS } from "@/lib/constants";
-import type { Event, EventType } from "@/types/database";
+import type { Event, EventType, RsvpStatus } from "@/types/database";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -40,6 +40,8 @@ export function EventDrawer({
   onSaved,
   onDeleted,
   readOnly,
+  profileId,
+  canEdit,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -47,6 +49,8 @@ export function EventDrawer({
   onSaved: () => void;
   onDeleted: () => void;
   readOnly?: boolean;
+  profileId?: string;
+  canEdit?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,6 +62,9 @@ export function EventDrawer({
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [myRsvp, setMyRsvp] = useState<RsvpStatus | null>(null);
+  const [rsvpCounts, setRsvpCounts] = useState<Record<string, number>>({});
+  const [rsvpSaving, setRsvpSaving] = useState(false);
 
   useEffect(() => {
     if (event) {
@@ -67,6 +74,19 @@ export function EventDrawer({
       setEndTime(toLocalInput(event.end_time));
       setLocation(event.location ?? "");
       setEventType(event.event_type);
+
+      // Fetch RSVP data
+      const supabase = createClient();
+      supabase.from("event_rsvps").select("profile_id,status").eq("event_id", event.id).then(({ data }) => {
+        if (!data) return;
+        const counts: Record<string, number> = {};
+        for (const r of data) counts[r.status] = (counts[r.status] ?? 0) + 1;
+        setRsvpCounts(counts);
+        if (profileId) {
+          const mine = data.find((r) => r.profile_id === profileId);
+          setMyRsvp(mine ? (mine.status as RsvpStatus) : null);
+        }
+      });
     } else {
       setTitle("");
       setDescription("");
@@ -74,9 +94,31 @@ export function EventDrawer({
       setEndTime("");
       setLocation("");
       setEventType("drill");
+      setMyRsvp(null);
+      setRsvpCounts({});
     }
     setDirty(false);
-  }, [event, open]);
+  }, [event, open, profileId]);
+
+  const submitRsvp = async (status: RsvpStatus) => {
+    if (!event || !profileId) return;
+    setRsvpSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("event_rsvps").upsert(
+      { event_id: event.id, profile_id: profileId, status },
+      { onConflict: "event_id,profile_id" }
+    );
+    setRsvpSaving(false);
+    if (error) { toast.error("Failed to save RSVP"); return; }
+    const prev = myRsvp;
+    setMyRsvp(status);
+    setRsvpCounts((c) => {
+      const next = { ...c };
+      if (prev) next[prev] = Math.max(0, (next[prev] ?? 1) - 1);
+      next[status] = (next[status] ?? 0) + 1;
+      return next;
+    });
+  };
 
   const requestClose = () => {
     if (dirty) setConfirmClose(true);
@@ -173,6 +215,34 @@ export function EventDrawer({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* RSVP */}
+            {event && profileId && (
+              <div className="space-y-2 rounded-lg border bg-gray-50 p-3">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your RSVP</Label>
+                <div className="flex gap-2">
+                  {([
+                    { status: "attending" as RsvpStatus, label: "Going", cls: "bg-green-500 hover:bg-green-600" },
+                    { status: "maybe" as RsvpStatus, label: "Maybe", cls: "bg-amber-500 hover:bg-amber-600" },
+                    { status: "not_attending" as RsvpStatus, label: "Can't Go", cls: "bg-red-500 hover:bg-red-600" },
+                  ] as const).map(({ status, label, cls }) => (
+                    <button
+                      key={status}
+                      disabled={rsvpSaving}
+                      onClick={() => submitRsvp(status)}
+                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold text-white transition-all ${myRsvp === status ? cls + " ring-2 ring-offset-1 ring-current opacity-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {canEdit && (
+                  <p className="text-[11px] text-gray-400 text-center">
+                    Going: {rsvpCounts["attending"] ?? 0} · Maybe: {rsvpCounts["maybe"] ?? 0} · Can&apos;t Go: {rsvpCounts["not_attending"] ?? 0}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           {!readOnly && (
             <SheetFooter className="flex-row justify-between gap-2">

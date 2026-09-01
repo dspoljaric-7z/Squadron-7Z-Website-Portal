@@ -17,6 +17,20 @@ import {
   Award,
   Layers,
   Network,
+  CheckSquare,
+  Search,
+  TrendingUp,
+  Shirt,
+  AlertTriangle,
+  FileWarning,
+  Lightbulb,
+  UserPlus,
+  Key,
+  Calendar,
+  Database,
+  Settings,
+  BookOpen,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -37,6 +51,20 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   Award,
   Layers,
   Network,
+  CheckSquare,
+  Search,
+  TrendingUp,
+  Shirt,
+  AlertTriangle,
+  FileWarning,
+  Lightbulb,
+  UserPlus,
+  Key,
+  Calendar,
+  Database,
+  Settings,
+  BookOpen,
+  Trophy,
 };
 
 export function MobileNav({

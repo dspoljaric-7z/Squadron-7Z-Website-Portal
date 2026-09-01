@@ -1,4 +1,4 @@
-import { Anchor } from "lucide-react";
+import { UnitLogo } from "@/components/shared/unit-logo";
 
 // SVG wave paths as data URIs
 const WAVE1 = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,60 C150,100 350,0 600,60 C850,120 1050,20 1200,60 L1200,120 L0,120 Z' fill='%230a2d6e'/%3E%3C/svg%3E")`;
@@ -32,13 +32,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* Content */}
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
 
-        {/* Anchor logo */}
+        {/* Unit seal */}
         <div className="anchor-float mb-8 flex flex-col items-center gap-3 text-center">
           <div
-            className="flex h-20 w-20 items-center justify-center rounded-full bg-white/5 backdrop-blur-sm"
+            className="flex items-center justify-center rounded-full bg-white/5 backdrop-blur-sm p-1"
             style={{ boxShadow: "0 0 0 1px rgba(184,134,11,0.4), 0 0 40px rgba(184,134,11,0.2), inset 0 0 20px rgba(184,134,11,0.05)" }}
           >
-            <Anchor className="h-10 w-10 text-[#B8860B]" />
+            <UnitLogo size={80} />
           </div>
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-white">

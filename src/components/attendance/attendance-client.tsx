@@ -15,8 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ATTENDANCE_COLORS } from "@/lib/constants";
-import { initials, roleLabel, ROLE_ORDER } from "@/lib/format";
-import { isOfficer } from "@/lib/nav";
+import { initials, lastFirst, byLastName, roleLabel, ROLE_ORDER } from "@/lib/format";
+import { isOfficer } from "@/lib/permissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Lock, Unlock, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,14 +54,17 @@ export function AttendanceClient({
   }, [records]);
 
   const locked = records.length > 0 && records.every((r) => r.locked);
-  const canLock = isOfficer(profile.role);
+  const canLock = isOfficer(profile);
   const selectedEvent = events.find((e) => e.id === eventId);
 
   // Group members by role, sorted by role rank then name
   const membersByRole = useMemo(() => {
     const groups: Record<string, Profile[]> = {};
     [...members]
-      .sort((a, b) => (ROLE_ORDER[a.role] ?? 99) - (ROLE_ORDER[b.role] ?? 99))
+      .sort((a, b) => {
+        const roleDiff = (ROLE_ORDER[a.role] ?? 99) - (ROLE_ORDER[b.role] ?? 99);
+        return roleDiff !== 0 ? roleDiff : byLastName(a, b);
+      })
       .forEach((m) => {
         if (!groups[m.role]) groups[m.role] = [];
         groups[m.role].push(m);
@@ -299,7 +302,7 @@ export function AttendanceClient({
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{member.full_name}</p>
+                          <p className="truncate text-sm font-medium">{lastFirst(member.full_name)}</p>
                           <p className="text-xs text-gray-400">
                             {member.rank ?? roleLabel(member.role)}
                             {member.billet ? ` · ${member.billet}` : ""}

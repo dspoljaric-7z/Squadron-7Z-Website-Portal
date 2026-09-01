@@ -13,5 +13,5 @@ export default async function CalendarPage() {
 
   const canEdit = profile.role === "officer" || profile.role === "snco";
 
-  return <CalendarClient initialEvents={events ?? []} canEdit={canEdit} />;
+  return <CalendarClient initialEvents={events ?? []} canEdit={canEdit} profileId={profile.id} />;
 }

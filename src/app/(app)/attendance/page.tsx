@@ -2,11 +2,11 @@ import { requireProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 import { redirect } from "next/navigation";
-import { isStaff } from "@/lib/nav";
+import { isStaff } from "@/lib/permissions";
 
 export default async function AttendancePage() {
   const profile = await requireProfile();
-  if (!isStaff(profile.role)) redirect("/dashboard");
+  if (!isStaff(profile)) redirect("/dashboard");
 
   const supabase = await createClient();
   const [eventsRes, membersRes] = await Promise.all([
@@ -15,7 +15,6 @@ export default async function AttendancePage() {
       .from("profiles")
       .select("*")
       .eq("active", true)
-      .eq("approved", true)
       .in("role", ["officer", "snco", "nco", "cadet"])
       .order("full_name"),
   ]);

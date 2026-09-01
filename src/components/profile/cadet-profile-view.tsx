@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ATTENDANCE_COLORS } from "@/lib/constants";
-import { initials, roleLabel } from "@/lib/format";
+import { initials, roleLabel, computedTrainingPhase, allBillets } from "@/lib/format";
 import type { Attendance, Profile, StaffNote } from "@/types/database";
 import { Pencil } from "lucide-react";
 import { format } from "date-fns";
@@ -51,6 +51,8 @@ export function CadetProfileView({
   const [editOpen, setEditOpen] = useState(false);
   const [rank, setRank] = useState(cadet.rank ?? "");
   const [billet, setBillet] = useState(cadet.billet ?? "");
+  const [billet2, setBillet2] = useState(cadet.billet_2 ?? "");
+  const [billet3, setBillet3] = useState(cadet.billet_3 ?? "");
 
   useEffect(() => {
     const supabase = createClient();
@@ -98,7 +100,7 @@ export function CadetProfileView({
 
   const saveRankBillet = async () => {
     const supabase = createClient();
-    const { error } = await supabase.from("profiles").update({ rank, billet }).eq("id", cadet.id);
+    const { error } = await supabase.from("profiles").update({ rank, billet, billet_2: billet2 || null, billet_3: billet3 || null }).eq("id", cadet.id);
     if (error) {
       toast.error("Failed to update profile");
       return;
@@ -130,7 +132,7 @@ export function CadetProfileView({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold text-gray-900">{isOwner ? "My Profile" : "Cadet Profile"}</h1>
+        <h1 className="text-xl font-bold text-gray-900">{isOwner ? "My Profile" : `${roleLabel(cadet.role)} Profile`}</h1>
         <LiveIndicator />
       </div>
 
@@ -144,11 +146,19 @@ export function CadetProfileView({
               <h2 className="text-xl font-semibold">{cadet.full_name}</h2>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 {cadet.rank && <Badge className="bg-[#B8860B] text-white">{cadet.rank}</Badge>}
-                {cadet.billet && <Badge variant="outline">{cadet.billet}</Badge>}
+                {allBillets(cadet).map((b) => (
+                  <Badge key={b} variant="outline">{b}</Badge>
+                ))}
                 <Badge variant="outline" className="capitalize">{roleLabel(cadet.role)}</Badge>
               </div>
               {cadet.join_date && (
                 <p className="mt-1 text-xs text-gray-400">Joined {format(new Date(cadet.join_date), "MMM d, yyyy")}</p>
+              )}
+              {cadet.date_of_rank && (
+                <p className="mt-0.5 text-xs text-gray-400">Date of Rate: {format(new Date(cadet.date_of_rank), "MMM d, yyyy")}</p>
+              )}
+              {computedTrainingPhase(cadet.rank ?? null) && (
+                <p className="mt-0.5 text-xs font-medium text-[#003087]/70">{computedTrainingPhase(cadet.rank ?? null)}</p>
               )}
             </div>
           </div>
@@ -165,8 +175,16 @@ export function CadetProfileView({
                     <Input value={rank} onChange={(e) => setRank(e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Billet / Role</Label>
+                    <Label>Primary Billet</Label>
                     <Input value={billet} onChange={(e) => setBillet(e.target.value)} placeholder="e.g. Section Commander" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Secondary Billet</Label>
+                    <Input value={billet2} onChange={(e) => setBillet2(e.target.value)} placeholder="Optional" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tertiary Billet</Label>
+                    <Input value={billet3} onChange={(e) => setBillet3(e.target.value)} placeholder="Optional" />
                   </div>
                 </div>
                 <DialogFooter>

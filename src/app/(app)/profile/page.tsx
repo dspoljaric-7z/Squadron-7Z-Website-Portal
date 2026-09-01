@@ -7,14 +7,7 @@ export default async function MyProfilePage() {
   const viewer = await requireProfile();
   const supabase = await createClient();
 
-  const targetId = viewer.role === "parent" ? viewer.parent_of : viewer.id;
-  if (!targetId) {
-    return (
-      <div className="rounded-md border bg-white p-6 text-sm text-gray-500">
-        No linked cadet profile found yet. Please contact a Squadron Officer to link your account.
-      </div>
-    );
-  }
+  const targetId = viewer.id;
 
   if (viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco") redirect(`/cadets/${viewer.id}`);
 

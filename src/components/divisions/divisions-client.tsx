@@ -21,8 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Users, Layers } from "lucide-react";
-import { initials, roleLabel, ROLE_ORDER } from "@/lib/format";
+import { Plus, Pencil, Trash2, Users, Layers, ChevronDown, ChevronRight } from "lucide-react";
+import { initials, lastFirst, byLastName, roleLabel, ROLE_ORDER } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Division, Profile } from "@/types/database";
@@ -32,7 +32,7 @@ const DIVISION_COLORS = [
   "#006080", "#7a4000", "#555555",
 ];
 
-type MemberWithDivision = Pick<Profile, "id" | "full_name" | "rank" | "role" | "division_id" | "avatar_url">;
+type MemberWithDivision = Pick<Profile, "id" | "full_name" | "rank" | "role" | "division_id" | "billet" | "avatar_url">;
 
 export function DivisionsClient({
   profile,
@@ -51,6 +51,15 @@ export function DivisionsClient({
   const [editing, setEditing] = useState<Division | null>(null);
   const [form, setForm] = useState({ name: "", description: "", color: DIVISION_COLORS[0] });
   const [saving, setSaving] = useState(false);
+  const [expandedDivs, setExpandedDivs] = useState<Set<string>>(new Set());
+  const canEdit = profile.role === "officer" || profile.role === "snco";
+
+  const toggleExpand = (id: string) =>
+    setExpandedDivs((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const openNew = () => {
     setEditing(null);
@@ -133,9 +142,11 @@ export function DivisionsClient({
             Organize members into operational divisions
           </p>
         </div>
-        <Button onClick={openNew} className="bg-[#003087] hover:bg-[#002266]">
-          <Plus className="mr-1 h-4 w-4" /> New Division
-        </Button>
+        {canEdit && (
+          <Button onClick={openNew} className="bg-[#003087] hover:bg-[#002266]">
+            <Plus className="mr-1 h-4 w-4" /> New Division
+          </Button>
+        )}
       </div>
 
       {/* Stats row */}
@@ -156,42 +167,51 @@ export function DivisionsClient({
         </div>
       </div>
 
-      {/* Division cards */}
+      {/* Division cards — expandable */}
       {divisions.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-3">
           {divisions.map((div) => {
-            const divMembers = sortedMembers.filter((m) => memberDivisions[m.id] === div.id);
+            const divMembers = [...sortedMembers.filter((m) => memberDivisions[m.id] === div.id)].sort(byLastName);
+            const expanded = expandedDivs.has(div.id);
             return (
               <Card key={div.id} className="overflow-hidden">
-                <div
-                  className="h-1.5 w-full"
-                  style={{ backgroundColor: div.color ?? "#003087" }}
-                />
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-2">
+                <div className="h-1.5 w-full" style={{ backgroundColor: div.color ?? "#003087" }} />
+                <button
+                  className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                  onClick={() => toggleExpand(div.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    {expanded ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
                     <div>
                       <h3 className="font-bold text-gray-900">{div.name}</h3>
-                      {div.description && (
-                        <p className="mt-0.5 text-xs text-gray-400">{div.description}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button onClick={() => openEdit(div)} className="text-gray-400 hover:text-[#003087]">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => deleteDivision(div.id)} className="text-gray-400 hover:text-red-600">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {div.description && <p className="text-xs text-gray-400">{div.description}</p>}
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-1 text-xs text-gray-400">
-                    <Users className="h-3.5 w-3.5" />
-                    <span>{divMembers.length} member{divMembers.length !== 1 ? "s" : ""}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                      <Users className="h-3.5 w-3.5" />
+                      <span>{divMembers.length}</span>
+                    </div>
+                    {canEdit && (
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => openEdit(div)} className="text-gray-400 hover:text-[#003087] p-1">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => deleteDivision(div.id)} className="text-gray-400 hover:text-red-600 p-1">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {divMembers.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {divMembers.slice(0, 5).map((m) => (
-                        <Avatar key={m.id} className="h-7 w-7">
+                </button>
+                {expanded && (
+                  <div className="border-t divide-y">
+                    {divMembers.length === 0 && (
+                      <p className="px-4 py-3 text-sm text-gray-400">No members assigned.</p>
+                    )}
+                    {divMembers.map((m) => (
+                      <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <Avatar className="h-8 w-8 shrink-0">
                           <AvatarFallback
                             className="text-[10px] text-white"
                             style={{ backgroundColor: div.color ?? "#003087" }}
@@ -199,15 +219,16 @@ export function DivisionsClient({
                             {initials(m.full_name)}
                           </AvatarFallback>
                         </Avatar>
-                      ))}
-                      {divMembers.length > 5 && (
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-[10px] font-medium text-gray-500">
-                          +{divMembers.length - 5}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{lastFirst(m.full_name)}</p>
+                          <p className="text-xs text-gray-400">
+                            {[m.rank, m.billet].filter(Boolean).join(" · ") || roleLabel(m.role)}
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -224,61 +245,63 @@ export function DivisionsClient({
         </Card>
       )}
 
-      {/* Member assignment table */}
-      <div>
-        <h2 className="mb-3 text-lg font-bold text-[#003087]">Assign Members</h2>
-        <Card className="divide-y overflow-hidden">
-          {sortedMembers.map((member) => (
-            <div key={member.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div className="flex items-center gap-3 min-w-0">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="bg-[#003087] text-xs text-white">
-                    {initials(member.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{member.full_name}</p>
-                  <p className="text-xs text-gray-400">
-                    {member.rank ?? roleLabel(member.role)}
-                  </p>
+      {/* Member assignment table — visible to officers and SNCOs */}
+      {canEdit && (
+        <div>
+          <h2 className="mb-3 text-lg font-bold text-[#003087]">Assign Members</h2>
+          <Card className="divide-y overflow-hidden">
+            {[...sortedMembers].sort(byLastName).map((member) => (
+              <div key={member.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarFallback className="bg-[#003087] text-xs text-white">
+                      {initials(member.full_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{lastFirst(member.full_name)}</p>
+                    <p className="text-xs text-gray-400">
+                      {[member.rank, member.billet].filter(Boolean).join(" · ") || roleLabel(member.role)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {memberDivisions[member.id] && (
+                    <div
+                      className="h-2 w-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          divisions.find((d) => d.id === memberDivisions[member.id])?.color ?? "#003087",
+                      }}
+                    />
+                  )}
+                  <Select
+                    value={memberDivisions[member.id] ?? "none"}
+                    onValueChange={(v) => assignMember(member.id, v === "none" ? null : v)}
+                  >
+                    <SelectTrigger className="h-8 w-40 text-xs">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        <span className="text-gray-400">— Unassigned —</span>
+                      </SelectItem>
+                      {divisions.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {memberDivisions[member.id] && (
-                  <div
-                    className="h-2 w-2 rounded-full"
-                    style={{
-                      backgroundColor:
-                        divisions.find((d) => d.id === memberDivisions[member.id])?.color ?? "#003087",
-                    }}
-                  />
-                )}
-                <Select
-                  value={memberDivisions[member.id] ?? "none"}
-                  onValueChange={(v) => assignMember(member.id, v === "none" ? null : v)}
-                >
-                  <SelectTrigger className="h-8 w-44 text-xs">
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      <span className="text-gray-400">— Unassigned —</span>
-                    </SelectItem>
-                    {divisions.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          ))}
-          {members.length === 0 && (
-            <p className="p-6 text-center text-sm text-gray-400">No approved members found.</p>
-          )}
-        </Card>
-      </div>
+            ))}
+            {members.length === 0 && (
+              <p className="p-6 text-center text-sm text-gray-400">No active members found.</p>
+            )}
+          </Card>
+        </div>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

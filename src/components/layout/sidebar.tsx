@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UnitLogo } from "@/components/shared/unit-logo";
 import {
-  Anchor,
   LogOut,
   LayoutDashboard,
   CalendarDays,
@@ -19,6 +19,20 @@ import {
   Award,
   Layers,
   Network,
+  CheckSquare,
+  Search,
+  TrendingUp,
+  Shirt,
+  AlertTriangle,
+  FileWarning,
+  Lightbulb,
+  UserPlus,
+  Key,
+  Calendar,
+  Database,
+  Settings,
+  BookOpen,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +55,20 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   Award,
   Layers,
   Network,
+  CheckSquare,
+  Search,
+  TrendingUp,
+  Shirt,
+  AlertTriangle,
+  FileWarning,
+  Lightbulb,
+  UserPlus,
+  Key,
+  Calendar,
+  Database,
+  Settings,
+  BookOpen,
+  Trophy,
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -48,7 +76,6 @@ const ROLE_COLORS: Record<string, string> = {
   snco: "text-purple-400",
   nco: "text-amber-400",
   cadet: "text-blue-300",
-  parent: "text-gray-400",
 };
 
 export function Sidebar({
@@ -89,21 +116,16 @@ export function Sidebar({
     <aside className="hidden w-64 flex-col bg-[#0d1f3c] md:flex" style={{ borderRight: "1px solid rgba(255,255,255,0.06)" }}>
 
       {/* Logo */}
-      <div className="px-5 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div className="px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-            style={{
-              background: "rgba(184,134,11,0.1)",
-              boxShadow: "0 0 0 1px rgba(184,134,11,0.3), 0 0 12px rgba(184,134,11,0.15)",
-            }}
-          >
-            <Anchor className="h-4.5 w-4.5 text-[#B8860B]" />
+          {/* Unit seal */}
+          <div className="shrink-0">
+            <UnitLogo size={44} />
           </div>
           <div className="min-w-0">
             <p className="truncate text-[13px] font-bold leading-tight text-white">{unitName}</p>
             <p className="mt-0.5 text-[10px] font-medium uppercase tracking-widest text-white/30">
-              NSCC Portal
+              NSCC · SQ7-Z
             </p>
           </div>
         </div>

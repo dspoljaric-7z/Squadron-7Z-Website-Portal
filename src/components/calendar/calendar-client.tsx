@@ -23,7 +23,7 @@ import {
 import { ChevronLeft, ChevronRight, Plus, List, Grid3x3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function CalendarClient({ initialEvents, canEdit }: { initialEvents: Event[]; canEdit: boolean }) {
+export function CalendarClient({ initialEvents, canEdit, profileId }: { initialEvents: Event[]; canEdit: boolean; profileId?: string }) {
   const [events, setEvents] = useState(initialEvents);
   const [view, setView] = useState<"month" | "list">("month");
   const [month, setMonth] = useState(new Date());
@@ -164,6 +164,8 @@ export function CalendarClient({ initialEvents, canEdit }: { initialEvents: Even
         onSaved={() => {}}
         onDeleted={() => {}}
         readOnly={!canEdit}
+        profileId={profileId}
+        canEdit={canEdit}
       />
     </div>
   );

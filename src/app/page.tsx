@@ -1,7 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { Anchor, Shield, Users, ChevronRight } from "lucide-react";
+import { Shield, Users, ChevronRight } from "lucide-react";
+import { UnitLogo } from "@/components/shared/unit-logo";
 
 export default async function LandingPage() {
   const supabase = await createClient();
@@ -41,9 +42,7 @@ export default async function LandingPage() {
       {/* Top bar */}
       <div className="relative z-10 flex items-center justify-between px-6 py-4 sm:px-10">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#B8860B]">
-            <Anchor className="h-4 w-4 text-white" />
-          </div>
+          <UnitLogo size={36} />
           <span className="hidden text-sm font-semibold text-white/70 sm:block">NSCC</span>
         </div>
         <div className="flex items-center gap-3">
@@ -65,17 +64,19 @@ export default async function LandingPage() {
       {/* Hero content */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
         {/* Logo / anchor */}
-        <div className="mb-8 flex h-28 w-28 items-center justify-center rounded-full border-2 border-[#B8860B]/50 bg-[#003087]/60 ring-4 ring-[#B8860B]/20">
+        <div className="mb-8">
           {logoUrl ? (
-            <Image
-              src={logoUrl}
-              alt={`${unitName} logo`}
-              width={80}
-              height={80}
-              className="rounded-full object-cover"
-            />
+            <div className="flex h-28 w-28 items-center justify-center rounded-full border-2 border-[#B8860B]/50 bg-[#003087]/60 ring-4 ring-[#B8860B]/20">
+              <Image
+                src={logoUrl}
+                alt={`${unitName} logo`}
+                width={80}
+                height={80}
+                className="rounded-full object-cover"
+              />
+            </div>
           ) : (
-            <Anchor className="h-14 w-14 text-[#B8860B]" />
+            <UnitLogo size={112} />
           )}
         </div>
 

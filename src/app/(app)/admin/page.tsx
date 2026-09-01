@@ -8,10 +8,11 @@ export default async function AdminPage() {
   if (profile.role !== "officer") redirect("/dashboard");
 
   const supabase = await createClient();
-  const [{ data: users }, { data: inviteCodes }, { data: settingsRows }] = await Promise.all([
+  const [{ data: users }, { data: inviteCodes }, { data: settingsRows }, { data: divisions }] = await Promise.all([
     supabase.from("profiles").select("*").order("created_at", { ascending: false }),
     supabase.from("invite_codes").select("*").order("created_at", { ascending: false }),
     supabase.from("site_settings").select("*").eq("id", 1),
+    supabase.from("divisions").select("id, name").order("name"),
   ]);
 
   return (
@@ -20,6 +21,7 @@ export default async function AdminPage() {
       initialUsers={users ?? []}
       initialInviteCodes={inviteCodes ?? []}
       initialSettings={settingsRows?.[0] ?? null}
+      divisions={divisions ?? []}
     />
   );
 }

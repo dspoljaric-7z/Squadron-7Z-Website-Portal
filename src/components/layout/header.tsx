@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { NotificationBell } from "@/components/shared/notification-bell";
 import { initials, roleLabel } from "@/lib/format";
 import type { Profile } from "@/types/database";
 
@@ -17,7 +18,8 @@ export function Header({ profile, unitName }: { profile: Profile; unitName: stri
         <div className="h-1.5 w-1.5 rounded-full bg-[#003087]" />
         <p className="text-sm font-bold text-gray-800 sm:text-[15px]">{unitName}</p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <NotificationBell profileId={profile.id} />
         <div className="hidden text-right sm:block">
           <p className="text-[13px] font-semibold leading-tight text-gray-800">{profile.full_name}</p>
           <div className="flex items-center justify-end gap-1.5 mt-0.5">

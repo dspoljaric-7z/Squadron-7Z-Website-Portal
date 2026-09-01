@@ -12,9 +12,8 @@ export default async function DivisionsPage() {
     supabase.from("divisions").select("*").order("name"),
     supabase
       .from("profiles")
-      .select("id, full_name, rank, role, division_id, avatar_url")
+      .select("id, full_name, rank, role, division_id, billet, avatar_url")
       .eq("active", true)
-      .eq("approved", true)
       .in("role", ["cadet", "nco", "snco", "officer"])
       .order("full_name"),
   ]);

@@ -22,6 +22,9 @@ import {
   Plus,
   ClipboardCheck,
   TrendingUp,
+  CheckSquare,
+  Shield,
+  BookOpen,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
 
@@ -57,6 +60,13 @@ export function DashboardClient({
   todayPod,
   linkedCadet = null,
   cadetAttendance = null,
+  openCorrectionsCount,
+  activePipelinesCount,
+  openPipsCount,
+  myAttendancePct = 0,
+  myAttendanceTotal = 0,
+  myQualsDone = 0,
+  myOpenCorrections = 0,
 }: {
   profile: Profile;
   initialEvents: Event[];
@@ -66,6 +76,13 @@ export function DashboardClient({
   todayPod: PlanOfDay | null;
   linkedCadet?: Profile | null;
   cadetAttendance?: AttendanceWithEvent[] | null;
+  openCorrectionsCount?: number;
+  activePipelinesCount?: number;
+  openPipsCount?: number;
+  myAttendancePct?: number;
+  myAttendanceTotal?: number;
+  myQualsDone?: number;
+  myOpenCorrections?: number;
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
@@ -259,6 +276,82 @@ export function DashboardClient({
         <LiveIndicator />
       </div>
 
+      {/* Personal stats strip — shown for non-staff, non-parent members */}
+      {!isStaff && myAttendanceTotal > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {/* Attendance */}
+          <Link
+            href="/my-record"
+            className="group rounded-xl border bg-[#003087] p-4 text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/50">
+                My Attendance
+              </p>
+              <TrendingUp className="h-4 w-4 text-white/30" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold">{myAttendancePct}%</p>
+            <p className="mt-0.5 text-xs text-white/40">{myAttendanceTotal} events</p>
+          </Link>
+          {/* Quals */}
+          <Link
+            href="/my-record"
+            className="group rounded-xl border bg-white p-4 shadow-sm transition-colors hover:border-[#003087]/30"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                My Quals
+              </p>
+              <CheckSquare className="h-4 w-4 text-[#003087]" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold text-[#003087]">
+              {myQualsDone}
+              <span className="text-lg text-gray-300">/7</span>
+            </p>
+            <p className="mt-0.5 text-xs text-gray-400">completed</p>
+          </Link>
+          {/* Status */}
+          <Link
+            href="/my-record"
+            className={`group rounded-xl border p-4 shadow-sm transition-colors hover:border-opacity-50 ${
+              myOpenCorrections > 0
+                ? "border-red-200 bg-red-50"
+                : "bg-white hover:border-green-300"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <p
+                className={`text-xs font-semibold uppercase tracking-wide ${
+                  myOpenCorrections > 0 ? "text-red-400" : "text-gray-400"
+                }`}
+              >
+                My Status
+              </p>
+              <Shield
+                className={`h-4 w-4 ${
+                  myOpenCorrections > 0 ? "text-red-500" : "text-green-500"
+                }`}
+              />
+            </div>
+            {myOpenCorrections > 0 ? (
+              <>
+                <p className="mt-2 text-3xl font-extrabold text-red-600">
+                  {myOpenCorrections}
+                </p>
+                <p className="mt-0.5 text-xs text-red-400">
+                  open item{myOpenCorrections !== 1 ? "s" : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-xl font-extrabold text-green-600">Clear</p>
+                <p className="mt-0.5 text-xs text-gray-400">no open items</p>
+              </>
+            )}
+          </Link>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -322,6 +415,57 @@ export function DashboardClient({
         </div>
       </div>
 
+      {/* Operations summary for command */}
+      {(openCorrectionsCount != null || activePipelinesCount != null) && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {openCorrectionsCount != null && (
+            <Link
+              href="/corrections"
+              className="rounded-xl border bg-white p-4 shadow-sm hover:border-[#003087]/30 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Corrections</p>
+                <TrendingUp className="h-4 w-4 text-red-500" />
+              </div>
+              <p className={`mt-2 text-3xl font-extrabold ${openCorrectionsCount > 0 ? "text-red-600" : "text-gray-400"}`}>
+                {openCorrectionsCount}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-400">open</p>
+            </Link>
+          )}
+          {openPipsCount != null && (
+            <Link
+              href="/corrections"
+              className="rounded-xl border bg-white p-4 shadow-sm hover:border-[#003087]/30 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">PIPs</p>
+                <ClipboardCheck className="h-4 w-4 text-amber-500" />
+              </div>
+              <p className={`mt-2 text-3xl font-extrabold ${(openPipsCount ?? 0) > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                {openPipsCount ?? 0}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-400">open</p>
+            </Link>
+          )}
+          {activePipelinesCount != null && (
+            <Link
+              href="/nominations"
+              className="rounded-xl border bg-white p-4 shadow-sm hover:border-[#003087]/30 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Nominations</p>
+                <TrendingUp className="h-4 w-4 text-[#003087]" />
+              </div>
+              <p className={`mt-2 text-3xl font-extrabold ${(activePipelinesCount ?? 0) > 0 ? "text-[#003087]" : "text-gray-400"}`}>
+                {activePipelinesCount ?? 0}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-400">in pipeline</p>
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* Urgent alerts */}
       {urgent.map((a) => (
         <div
@@ -367,6 +511,23 @@ export function DashboardClient({
             </div>
           </div>
           <ChevronRight className="h-5 w-5 shrink-0 text-blue-400" />
+        </Link>
+      )}
+
+      {/* My Record link for cadets */}
+      {!isStaff && (
+        <Link
+          href="/my-record"
+          className="flex items-center justify-between rounded-xl border border-[#003087]/10 bg-[#003087]/5 p-3.5 transition-colors hover:bg-[#003087]/10"
+        >
+          <div className="flex items-center gap-3">
+            <BookOpen className="h-5 w-5 text-[#003087]" />
+            <div>
+              <p className="text-sm font-semibold text-[#003087]">My Record</p>
+              <p className="text-xs text-[#003087]/60">Attendance, quals, status &amp; upcoming drills</p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#003087]/40" />
         </Link>
       )}
 

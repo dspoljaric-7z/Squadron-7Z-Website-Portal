@@ -54,19 +54,12 @@ export function RegisterForm() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="cadet">Cadet</SelectItem>
-            <SelectItem value="parent">Parent / Guardian</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-gray-500">
           Officer and NCO accounts are upgraded by an Officer after registration.
         </p>
       </div>
-      {role === "parent" && (
-        <div className="space-y-2">
-          <Label htmlFor="parentOfName">Your Cadet&apos;s Full Name</Label>
-          <Input id="parentOfName" name="parentOfName" placeholder="As it appears on their profile" />
-        </div>
-      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" className="w-full bg-[#003087] hover:bg-[#002266]" disabled={pending}>
         {pending ? "Creating account..." : "Create Account"}

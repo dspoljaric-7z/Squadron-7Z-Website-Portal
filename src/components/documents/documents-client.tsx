@@ -50,13 +50,24 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
   const folders = useMemo(() => {
     const map = new Map<string, DocumentRow[]>();
     documents.forEach((d) => {
-      if (profile.role !== "officer" && profile.role !== "snco" && d.officer_only) return;
+      // Officers always see everything
+      if (profile.role === "officer") { map.set(d.folder, [...(map.get(d.folder) ?? []), d]); return; }
+      // Legacy officer_only check
+      if (d.officer_only && profile.role !== "snco") return;
+      // New granular access: if access_roles set, user must be in it (or match a billet)
+      if (d.access_roles && d.access_roles.length > 0) {
+        const roleMatch = d.access_roles.includes(profile.role);
+        const billetMatch = d.access_billets && profile.billet && d.access_billets.some(
+          (b) => profile.billet?.toLowerCase().includes(b.toLowerCase())
+        );
+        if (!roleMatch && !billetMatch) return;
+      }
       const list = map.get(d.folder) ?? [];
       list.push(d);
       map.set(d.folder, list);
     });
     return map;
-  }, [documents, profile.role]);
+  }, [documents, profile.role, profile.billet]);
 
   const remove = async (id: string) => {
     const supabase = createClient();
