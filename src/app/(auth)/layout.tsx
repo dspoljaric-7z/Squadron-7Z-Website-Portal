@@ -22,70 +22,93 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         {/* Logo + unit name */}
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
-          {/* Inline crest — 4 naval signal flags (S/Q/7/Z) in a circle */}
-          <svg
-            width="108"
-            height="108"
-            viewBox="0 0 200 200"
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ filter: "drop-shadow(0 0 16px rgba(184,134,11,0.35))" }}
-          >
+          {/* SQ7Z full crest — signal flags + curved motto */}
+          <svg width="120" height="120" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{ filter: "drop-shadow(0 0 20px rgba(184,134,11,0.4))" }}>
             <defs>
-              <radialGradient id="auth-bg" cx="50%" cy="35%" r="65%">
-                <stop offset="0%" stopColor="#163a6e"/>
-                <stop offset="100%" stopColor="#040e1f"/>
+              <radialGradient id="lc-ocean" cx="50%" cy="30%" r="70%">
+                <stop offset="0%" stopColor="#1a4f8a"/>
+                <stop offset="55%" stopColor="#0b2a66"/>
+                <stop offset="100%" stopColor="#050e20"/>
               </radialGradient>
-              <clipPath id="auth-circle">
-                <circle cx="100" cy="100" r="90"/>
-              </clipPath>
+              <clipPath id="lc-fz"><rect x="202" y="200" width="56" height="42"/></clipPath>
             </defs>
-
-            {/* Background */}
-            <circle cx="100" cy="100" r="98" fill="#0a1628"/>
-            {/* Gold rope ring */}
-            <circle cx="100" cy="100" r="94" fill="none" stroke="#C9A84C" strokeWidth="7" strokeDasharray="5,3"/>
-            <circle cx="100" cy="100" r="94" fill="none" stroke="#7a4a0e" strokeWidth="3.5" strokeDasharray="5,3" strokeDashoffset="4"/>
-            <circle cx="100" cy="100" r="88" fill="none" stroke="#C9A84C" strokeWidth="1.2"/>
-            {/* Inner ocean fill */}
-            <circle cx="100" cy="100" r="85" fill="url(#auth-bg)"/>
-
-            {/* 2×2 flag grid clipped to circle */}
-            <g clipPath="url(#auth-circle)">
-              {/* Divider lines */}
-              <line x1="100" y1="25" x2="100" y2="175" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5"/>
-              <line x1="25"  y1="100" x2="175" y2="100" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5"/>
-
-              {/* Flag S — top-left: white + blue center stripe */}
-              <rect x="26" y="26" width="72" height="72" fill="#ffffff"/>
-              <rect x="58" y="26" width="20" height="72" fill="#00247d"/>
-
-              {/* Flag Q — top-right: solid gold/yellow */}
-              <rect x="102" y="26" width="72" height="72" fill="#FFD100"/>
-
-              {/* Flag 7 — bottom-left: red + white stripes */}
-              <rect x="26" y="102" width="72" height="72" fill="#CF142B"/>
-              <rect x="26" y="120" width="72" height="11" fill="#ffffff"/>
-              <rect x="26" y="145" width="72" height="11" fill="#ffffff"/>
-
-              {/* Flag Z — bottom-right: quartered diagonal */}
-              <rect x="102" y="102" width="72" height="72" fill="#ffffff"/>
-              <polygon points="102,102 174,102 138,138" fill="#00247d"/>
-              <polygon points="174,102 174,174 138,138" fill="#FFD100"/>
-              <polygon points="174,174 102,174 138,138" fill="#CF142B"/>
-              <polygon points="102,174 102,102 138,138" fill="#111111"/>
+            <circle cx="200" cy="200" r="192" fill="#0b1d3a"/>
+            <circle cx="200" cy="200" r="183" fill="none" stroke="#C9A84C" strokeWidth="14" strokeDasharray="9,5"/>
+            <circle cx="200" cy="200" r="183" fill="none" stroke="#7a4a0e" strokeWidth="7" strokeDasharray="9,5" strokeDashoffset="7"/>
+            <circle cx="200" cy="200" r="172" fill="none" stroke="#C9A84C" strokeWidth="2.5"/>
+            <circle cx="200" cy="200" r="130" fill="url(#lc-ocean)"/>
+            <circle cx="200" cy="200" r="130" fill="none" stroke="#C9A84C" strokeWidth="2"/>
+            {/* Side stars */}
+            <polygon transform="translate(48,200)" fill="#C9A84C" points="0,-10 2.9,-4 9.5,-3.1 4.8,1.5 5.9,8.1 0,5 -5.9,8.1 -4.8,1.5 -9.5,-3.1 -2.9,-4"/>
+            <polygon transform="translate(352,200)" fill="#C9A84C" points="0,-10 2.9,-4 9.5,-3.1 4.8,1.5 5.9,8.1 0,5 -5.9,8.1 -4.8,1.5 -9.5,-3.1 -2.9,-4"/>
+            {/* Curved motto: BUILDING LEADERS OF CHARACTER */}
+            <g fontFamily="Georgia,serif" fontSize="8.5" fill="#C9A84C" textAnchor="middle" dominantBaseline="middle">
+              <text transform="rotate(-53,79,109)" x="79" y="109">B</text>
+              <text transform="rotate(-49,86,102)" x="86" y="102">U</text>
+              <text transform="rotate(-46,92,94)" x="92" y="94">I</text>
+              <text transform="rotate(-42,99,87)" x="99" y="87">L</text>
+              <text transform="rotate(-38,107,81)" x="107" y="81">D</text>
+              <text transform="rotate(-34,115,75)" x="115" y="75">I</text>
+              <text transform="rotate(-30,124,70)" x="124" y="70">N</text>
+              <text transform="rotate(-27,133,65)" x="133" y="65">G</text>
+              <text transform="rotate(-19,151,57)" x="151" y="57">L</text>
+              <text transform="rotate(-15,160,54)" x="160" y="54">E</text>
+              <text transform="rotate(-11,170,52)" x="170" y="52">A</text>
+              <text transform="rotate(-8,180,50)" x="180" y="50">D</text>
+              <text transform="rotate(-4,190,49)" x="190" y="49">E</text>
+              <text transform="rotate(0,200,49)" x="200" y="49">R</text>
+              <text transform="rotate(4,210,49)" x="210" y="49">S</text>
+              <text transform="rotate(11,230,52)" x="230" y="52">O</text>
+              <text transform="rotate(15,240,54)" x="240" y="54">F</text>
+              <text transform="rotate(23,259,61)" x="259" y="61">C</text>
+              <text transform="rotate(27,268,65)" x="268" y="65">H</text>
+              <text transform="rotate(30,277,70)" x="277" y="70">A</text>
+              <text transform="rotate(34,285,75)" x="285" y="75">R</text>
+              <text transform="rotate(38,293,81)" x="293" y="81">A</text>
+              <text transform="rotate(42,301,87)" x="301" y="87">C</text>
+              <text transform="rotate(46,308,94)" x="308" y="94">T</text>
+              <text transform="rotate(49,315,102)" x="315" y="102">E</text>
+              <text transform="rotate(53,321,109)" x="321" y="109">R</text>
             </g>
-
-            {/* Gold border over flags */}
-            <rect x="26" y="26" width="72" height="72" fill="none" stroke="#C9A84C" strokeWidth="1.5"/>
-            <rect x="102" y="26" width="72" height="72" fill="none" stroke="#C9A84C" strokeWidth="1.5"/>
-            <rect x="26" y="102" width="72" height="72" fill="none" stroke="#C9A84C" strokeWidth="1.5"/>
-            <rect x="102" y="102" width="72" height="72" fill="none" stroke="#C9A84C" strokeWidth="1.5"/>
-
-            {/* Letter labels */}
-            <text x="62" y="68" textAnchor="middle" dominantBaseline="middle" fontSize="28" fontWeight="bold" fontFamily="serif" fill="#C9A84C">S</text>
-            <text x="138" y="68" textAnchor="middle" dominantBaseline="middle" fontSize="28" fontWeight="bold" fontFamily="serif" fill="#003087">Q</text>
-            <text x="62" y="142" textAnchor="middle" dominantBaseline="middle" fontSize="28" fontWeight="bold" fontFamily="serif" fill="#ffffff">7</text>
-            <text x="138" y="142" textAnchor="middle" dominantBaseline="middle" fontSize="28" fontWeight="bold" fontFamily="serif" fill="#C9A84C">Z</text>
+            {/* Curved SQ7Z at bottom */}
+            <g fontFamily="Georgia,serif" fill="#C9A84C" textAnchor="middle" dominantBaseline="middle">
+              <text transform="rotate(26,134,336)" x="134" y="336" fontSize="11">·</text>
+              <text transform="rotate(15,161,346)" x="161" y="346" fontSize="28" fontWeight="bold">S</text>
+              <text transform="rotate(5,187,350)" x="187" y="350" fontSize="28" fontWeight="bold">Q</text>
+              <text transform="rotate(-5,213,350)" x="213" y="350" fontSize="28" fontWeight="bold">7</text>
+              <text transform="rotate(-15,239,346)" x="239" y="346" fontSize="28" fontWeight="bold">Z</text>
+              <text transform="rotate(-26,266,336)" x="266" y="336" fontSize="11">·</text>
+            </g>
+            {/* Signal flags grid */}
+            <line x1="142" y1="148" x2="142" y2="248" stroke="#C9A84C" strokeWidth="1.2" opacity="0.4"/>
+            <line x1="202" y1="148" x2="202" y2="248" stroke="#C9A84C" strokeWidth="1.2" opacity="0.4"/>
+            <line x1="258" y1="148" x2="258" y2="248" stroke="#C9A84C" strokeWidth="1.2" opacity="0.4"/>
+            {/* Flag S */}
+            <rect x="142" y="154" width="56" height="42" fill="#ffffff"/>
+            <rect x="161" y="161" width="18" height="28" fill="#00247d"/>
+            <rect x="142" y="154" width="56" height="42" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+            {/* Flag Q */}
+            <rect x="202" y="154" width="56" height="42" fill="#FFD100"/>
+            <rect x="202" y="154" width="56" height="42" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+            {/* Flag 7 */}
+            <rect x="142" y="200" width="56" height="42" fill="#CF142B"/>
+            <rect x="142" y="208" width="56" height="8" fill="white"/>
+            <rect x="142" y="225" width="56" height="8" fill="white"/>
+            <rect x="142" y="200" width="56" height="42" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+            {/* Flag Z */}
+            <rect x="202" y="200" width="56" height="42" fill="white"/>
+            <polygon points="202,200 258,200 230,221" fill="#00247d" clipPath="url(#lc-fz)"/>
+            <polygon points="258,200 258,242 230,221" fill="#FFD100" clipPath="url(#lc-fz)"/>
+            <polygon points="258,242 202,242 230,221" fill="#CF142B" clipPath="url(#lc-fz)"/>
+            <polygon points="202,242 202,200 230,221" fill="#111111" clipPath="url(#lc-fz)"/>
+            <rect x="202" y="200" width="56" height="42" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+            {/* Outer flag border */}
+            <rect x="139" y="151" width="122" height="94" fill="none" stroke="#C9A84C" strokeWidth="1.2" rx="2" opacity="0.5"/>
+            {/* USS SALEM / CA·139 labels */}
+            <text x="200" y="135" textAnchor="middle" fontFamily="Georgia,serif" fontSize="9" letterSpacing="3" fill="#C9A84C">USS SALEM</text>
+            <line x1="152" y1="141" x2="248" y2="141" stroke="#C9A84C" strokeWidth="0.8" opacity="0.6"/>
+            <line x1="152" y1="259" x2="248" y2="259" stroke="#C9A84C" strokeWidth="0.8" opacity="0.6"/>
+            <text x="200" y="267" textAnchor="middle" fontFamily="Georgia,serif" fontSize="9" letterSpacing="3" fill="#C9A84C">CA · 139</text>
           </svg>
 
           <div>
