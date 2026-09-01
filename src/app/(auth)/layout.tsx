@@ -1,5 +1,3 @@
-import { UnitLogo } from "@/components/shared/unit-logo";
-
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#000d1f] px-4 py-12">
@@ -31,7 +29,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               boxShadow: "0 0 0 1px rgba(184,134,11,0.3), 0 0 50px rgba(184,134,11,0.15)",
             }}
           >
-            <UnitLogo size={100} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/crest.svg" width={104} height={104} alt="SQ7Z Crest" />
           </div>
           <div>
             <h1 className="text-[22px] font-extrabold tracking-tight text-white leading-tight">

@@ -1,0 +1,34 @@
+<svg width="32" height="32" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <radialGradient id="ocean" cx="50%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#1a4f8a"/>
+    <stop offset="55%" stop-color="#0b2a66"/>
+    <stop offset="100%" stop-color="#050e20"/>
+  </radialGradient>
+  <clipPath id="fz"><rect x="202" y="200" width="56" height="42"/></clipPath>
+</defs>
+<circle cx="200" cy="200" r="192" fill="#0b1d3a"/>
+<circle cx="200" cy="200" r="183" fill="none" stroke="#C9A84C" stroke-width="14" stroke-dasharray="9,5"/>
+<circle cx="200" cy="200" r="183" fill="none" stroke="#7a4a0e" stroke-width="7" stroke-dasharray="9,5" stroke-dashoffset="7"/>
+<circle cx="200" cy="200" r="172" fill="none" stroke="#C9A84C" stroke-width="2.5"/>
+<circle cx="200" cy="200" r="130" fill="url(#ocean)"/>
+<circle cx="200" cy="200" r="130" fill="none" stroke="#C9A84C" stroke-width="2"/>
+<line x1="142" y1="148" x2="142" y2="248" stroke="#C9A84C" stroke-width="1.2" opacity="0.4"/>
+<line x1="202" y1="148" x2="202" y2="248" stroke="#C9A84C" stroke-width="1.2" opacity="0.4"/>
+<line x1="258" y1="148" x2="258" y2="248" stroke="#C9A84C" stroke-width="1.2" opacity="0.4"/>
+<rect x="142" y="154" width="56" height="42" fill="#ffffff"/>
+<rect x="161" y="161" width="18" height="28" fill="#00247d"/>
+<rect x="142" y="154" width="56" height="42" fill="none" stroke="#C9A84C" stroke-width="1.8"/>
+<rect x="202" y="154" width="56" height="42" fill="#FFD100"/>
+<rect x="202" y="154" width="56" height="42" fill="none" stroke="#C9A84C" stroke-width="1.8"/>
+<rect x="142" y="200" width="56" height="42" fill="#CF142B"/>
+<rect x="142" y="208" width="56" height="8" fill="white"/>
+<rect x="142" y="225" width="56" height="8" fill="white"/>
+<rect x="142" y="200" width="56" height="42" fill="none" stroke="#C9A84C" stroke-width="1.8"/>
+<rect x="202" y="200" width="56" height="42" fill="white"/>
+<polygon points="202,200 258,200 230,221" fill="#00247d" clip-path="url(#fz)"/>
+<polygon points="258,200 258,242 230,221" fill="#FFD100" clip-path="url(#fz)"/>
+<polygon points="258,242 202,242 230,221" fill="#CF142B" clip-path="url(#fz)"/>
+<polygon points="202,242 202,200 230,221" fill="#111111" clip-path="url(#fz)"/>
+<rect x="202" y="200" width="56" height="42" fill="none" stroke="#C9A84C" stroke-width="1.8"/>
+</svg>
