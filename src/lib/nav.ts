@@ -63,7 +63,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/qualifications",  label: "Qualifications",     iconName: "CheckSquare",     roles: ["officer", "snco", "nco", "cadet"] },
   { href: "/cadet-lookup",    label: "Cadet Lookup",       iconName: "Search",          requiresStaff: true },
   { href: "/divisions",       label: "Divisions",          iconName: "Layers",          roles: ["officer","snco"] },
-  { href: "/tsw-calendar",    label: "TSW Calendar",       iconName: "Calendar",        requiresSeniorStaff: true },
+  // TSW Calendar merged into main Calendar
   { href: "/recruiting",      label: "Recruiting",         iconName: "UserPlus",        requiresSeniorStaff: true },
   { href: "/ideas",           label: "Ideas Bank",         iconName: "Lightbulb",       requiresStaff: true },
 
