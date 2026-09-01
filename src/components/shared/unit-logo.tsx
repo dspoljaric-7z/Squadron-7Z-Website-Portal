@@ -11,12 +11,12 @@ export function UnitLogo({ size = 40, className }: { size?: number; className?: 
       className={className}
     >
       <defs>
-        <radialGradient id="sq7z-ocean" cx="50%" cy="30%" r="70%">
+        <radialGradient id="ul-ocean" cx="50%" cy="30%" r="70%">
           <stop offset="0%" stopColor="#1a4f8a"/>
           <stop offset="55%" stopColor="#0b2a66"/>
           <stop offset="100%" stopColor="#050e20"/>
         </radialGradient>
-        <clipPath id="sq7z-fz"><rect x="202" y="200" width="56" height="42"/></clipPath>
+        <clipPath id="ul-fz"><rect x="202" y="200" width="56" height="42"/></clipPath>
       </defs>
 
       {/* Outer background */}
@@ -28,7 +28,7 @@ export function UnitLogo({ size = 40, className }: { size?: number; className?: 
       <circle cx="200" cy="200" r="172" fill="none" stroke="#C9A84C" strokeWidth="2.5"/>
 
       {/* Inner ocean circle */}
-      <circle cx="200" cy="200" r="130" fill="url(#sq7z-ocean)"/>
+      <circle cx="200" cy="200" r="130" fill="url(#ul-ocean)"/>
       <circle cx="200" cy="200" r="130" fill="none" stroke="#C9A84C" strokeWidth="2"/>
 
       {/* Flag grid lines */}
@@ -53,10 +53,10 @@ export function UnitLogo({ size = 40, className }: { size?: number; className?: 
 
       {/* Flag Z — bottom-right: quartered diagonal */}
       <rect x="202" y="200" width="56" height="42" fill="white"/>
-      <polygon points="202,200 258,200 230,221" fill="#00247d" clipPath="url(#sq7z-fz)"/>
-      <polygon points="258,200 258,242 230,221" fill="#FFD100" clipPath="url(#sq7z-fz)"/>
-      <polygon points="258,242 202,242 230,221" fill="#CF142B" clipPath="url(#sq7z-fz)"/>
-      <polygon points="202,242 202,200 230,221" fill="#111111" clipPath="url(#sq7z-fz)"/>
+      <polygon points="202,200 258,200 230,221" fill="#00247d" clipPath="url(#ul-fz)"/>
+      <polygon points="258,200 258,242 230,221" fill="#FFD100" clipPath="url(#ul-fz)"/>
+      <polygon points="258,242 202,242 230,221" fill="#CF142B" clipPath="url(#ul-fz)"/>
+      <polygon points="202,242 202,200 230,221" fill="#111111" clipPath="url(#ul-fz)"/>
       <rect x="202" y="200" width="56" height="42" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
     </svg>
   );
