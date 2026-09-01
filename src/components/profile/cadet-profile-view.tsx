@@ -20,24 +20,40 @@ import {
 } from "@/components/ui/dialog";
 import { ATTENDANCE_COLORS } from "@/lib/constants";
 import { initials, roleLabel, computedTrainingPhase, allBillets } from "@/lib/format";
-import type { Attendance, Profile, StaffNote } from "@/types/database";
-import { Pencil } from "lucide-react";
+import type { Attendance, Profile, StaffNote, BoardResultRow, UniformInspectionResult, UniformInspectionSession } from "@/types/database";
+import { Pencil, Trophy, Shirt } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 type AttendanceWithEvent = Attendance & { events: { title: string; start_time: string } | null };
 type StaffNoteWithAuthor = StaffNote & { profiles: { full_name: string; rank: string | null } | null };
+type InspectionResultWithSession = UniformInspectionResult & { uniform_inspection_sessions: Pick<UniformInspectionSession, "date" | "notes"> | null };
+
+const BOARD_RESULT_COLORS: Record<string, string> = {
+  recommended: "bg-green-100 text-green-800 border-green-300",
+  not_recommended: "bg-red-100 text-red-800 border-red-300",
+  deferred: "bg-amber-100 text-amber-800 border-amber-300",
+};
+const BOARD_RESULT_LABELS: Record<string, string> = {
+  recommended: "Recommended",
+  not_recommended: "Not Recommended",
+  deferred: "Deferred",
+};
 
 export function CadetProfileView({
   viewer,
   cadet,
   initialAttendance,
   initialNotes,
+  initialBoardResults = [],
+  initialInspectionResults = [],
 }: {
   viewer: Profile;
   cadet: Profile;
   initialAttendance: AttendanceWithEvent[];
   initialNotes: StaffNoteWithAuthor[];
+  initialBoardResults?: BoardResultRow[];
+  initialInspectionResults?: InspectionResultWithSession[];
 }) {
   const isOwner = viewer.id === cadet.id;
   const isStaff = viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco";
@@ -48,6 +64,8 @@ export function CadetProfileView({
   const [attendance, setAttendance] = useState(initialAttendance);
   const [notes, setNotes] = useState(initialNotes);
   const [newNote, setNewNote] = useState("");
+  const boardResults = initialBoardResults;
+  const inspectionResults = initialInspectionResults;
   const [editOpen, setEditOpen] = useState(false);
   const [rank, setRank] = useState(cadet.rank ?? "");
   const [billet, setBillet] = useState(cadet.billet ?? "");
@@ -232,6 +250,55 @@ export function CadetProfileView({
           {attendance.length === 0 && <p className="text-sm text-gray-400">No attendance records yet.</p>}
         </div>
       </Card>
+
+      {boardResults.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-[#B8860B]" />
+            <h3 className="font-semibold">Promotion Board History</h3>
+          </div>
+          <div className="space-y-2">
+            {boardResults.map((r) => (
+              <div key={r.id} className="flex items-center justify-between rounded-md border bg-gray-50 px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium">{format(new Date(r.board_date), "MMM d, yyyy")}</span>
+                  {r.from_rank && r.to_rank && (
+                    <span className="ml-2 text-gray-500">{r.from_rank} → {r.to_rank}</span>
+                  )}
+                  {r.notes && <p className="mt-0.5 text-xs text-gray-400">{r.notes}</p>}
+                </div>
+                <Badge variant="outline" className={BOARD_RESULT_COLORS[r.result]}>
+                  {BOARD_RESULT_LABELS[r.result]}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {isStaff && inspectionResults.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Shirt className="h-4 w-4 text-[#003087]" />
+            <h3 className="font-semibold">Uniform Inspection History</h3>
+          </div>
+          <div className="space-y-2">
+            {inspectionResults.map((r) => (
+              <div key={r.id} className="flex items-center justify-between rounded-md border bg-gray-50 px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium">
+                    {r.uniform_inspection_sessions ? format(new Date(r.uniform_inspection_sessions.date), "MMM d, yyyy") : "—"}
+                  </span>
+                  {r.deficiencies && <p className="mt-0.5 text-xs text-gray-500">{r.deficiencies}</p>}
+                </div>
+                <Badge variant="outline" className={r.passed ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}>
+                  {r.passed ? "Pass" : "Fail"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {isStaff && (
         <Card>

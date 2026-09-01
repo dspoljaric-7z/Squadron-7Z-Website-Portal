@@ -11,9 +11,10 @@ export default async function MyProfilePage() {
 
   if (viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco") redirect(`/cadets/${viewer.id}`);
 
-  const [{ data: cadet }, { data: attendance }] = await Promise.all([
+  const [{ data: cadet }, { data: attendance }, { data: boardResults }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", targetId).single(),
     supabase.from("attendance").select("*, events(title, start_time)").eq("cadet_id", targetId).order("recorded_at", { ascending: false }),
+    supabase.from("board_results").select("*").eq("cadet_id", targetId).order("board_date", { ascending: false }),
   ]);
 
   if (!cadet) {
@@ -30,6 +31,7 @@ export default async function MyProfilePage() {
       cadet={cadet}
       initialAttendance={(attendance ?? []) as never}
       initialNotes={[]}
+      initialBoardResults={(boardResults ?? []) as never}
     />
   );
 }

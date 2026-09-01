@@ -148,6 +148,14 @@ export function EventDrawer({
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from("profiles").select("id").eq("user_id", user!.id).single();
       ({ error } = await supabase.from("events").insert({ ...payload, created_by: profile?.id }));
+      if (!error && eventType === "drill") {
+        const drillDate = new Date(startTime).toISOString().split("T")[0];
+        await supabase.from("drill_sessions").insert({
+          date: drillDate,
+          location: location || null,
+          recorded_by: profile?.id,
+        });
+      }
     }
     setSaving(false);
 
