@@ -64,6 +64,7 @@ export function CadetProfileView({
   const [attendance, setAttendance] = useState(initialAttendance);
   const [notes, setNotes] = useState(initialNotes);
   const [newNote, setNewNote] = useState("");
+  const [showAllAttendance, setShowAllAttendance] = useState(false);
   const boardResults = initialBoardResults;
   const inspectionResults = initialInspectionResults;
   const [editOpen, setEditOpen] = useState(false);
@@ -241,13 +242,21 @@ export function CadetProfileView({
           <p className="text-sm text-gray-500">{present} of {total} events attended</p>
         </div>
         <div className="space-y-1">
-          {attendance.slice(0, 8).map((a) => (
+          {(showAllAttendance ? attendance : attendance.slice(0, 8)).map((a) => (
             <div key={a.id} className="flex items-center justify-between text-sm">
               <span>{a.events?.title ?? "Event"} &middot; {a.events ? format(new Date(a.events.start_time), "MMM d, yyyy") : ""}</span>
               <Badge className={ATTENDANCE_COLORS[a.status]} variant="outline">{a.status}</Badge>
             </div>
           ))}
           {attendance.length === 0 && <p className="text-sm text-gray-400">No attendance records yet.</p>}
+          {attendance.length > 8 && (
+            <button
+              onClick={() => setShowAllAttendance((v) => !v)}
+              className="mt-1 text-xs font-medium text-[#003087] hover:underline"
+            >
+              {showAllAttendance ? "Show less" : `Show all ${attendance.length} records`}
+            </button>
+          )}
         </div>
       </Card>
 
@@ -276,7 +285,7 @@ export function CadetProfileView({
         </Card>
       )}
 
-      {isStaff && inspectionResults.length > 0 && (
+      {(isStaff || isOwner) && inspectionResults.length > 0 && (
         <Card className="p-4">
           <div className="mb-3 flex items-center gap-2">
             <Shirt className="h-4 w-4 text-[#003087]" />

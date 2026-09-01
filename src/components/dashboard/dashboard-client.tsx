@@ -281,7 +281,7 @@ export function DashboardClient({
         <div className="grid grid-cols-3 gap-3">
           {/* Attendance */}
           <Link
-            href="/my-record"
+            href="/profile"
             className="group rounded-xl border bg-[#003087] p-4 text-white shadow-sm transition-opacity hover:opacity-90"
           >
             <div className="flex items-center justify-between">
@@ -295,7 +295,7 @@ export function DashboardClient({
           </Link>
           {/* Quals */}
           <Link
-            href="/my-record"
+            href="/profile"
             className="group rounded-xl border bg-white p-4 shadow-sm transition-colors hover:border-[#003087]/30"
           >
             <div className="flex items-center justify-between">
@@ -312,7 +312,7 @@ export function DashboardClient({
           </Link>
           {/* Status */}
           <Link
-            href="/my-record"
+            href="/profile"
             className={`group rounded-xl border p-4 shadow-sm transition-colors hover:border-opacity-50 ${
               myOpenCorrections > 0
                 ? "border-red-200 bg-red-50"
@@ -514,17 +514,17 @@ export function DashboardClient({
         </Link>
       )}
 
-      {/* My Record link for cadets */}
+      {/* My Profile link for cadets */}
       {!isStaff && (
         <Link
-          href="/my-record"
+          href="/profile"
           className="flex items-center justify-between rounded-xl border border-[#003087]/10 bg-[#003087]/5 p-3.5 transition-colors hover:bg-[#003087]/10"
         >
           <div className="flex items-center gap-3">
             <BookOpen className="h-5 w-5 text-[#003087]" />
             <div>
-              <p className="text-sm font-semibold text-[#003087]">My Record</p>
-              <p className="text-xs text-[#003087]/60">Attendance, quals, status &amp; upcoming drills</p>
+              <p className="text-sm font-semibold text-[#003087]">My Profile</p>
+              <p className="text-xs text-[#003087]/60">Attendance, quals &amp; board history</p>
             </div>
           </div>
           <ChevronRight className="h-4 w-4 text-[#003087]/40" />
