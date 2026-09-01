@@ -1,12 +1,9 @@
 import { requireProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
-import { isStaff } from "@/lib/permissions";
-import { redirect } from "next/navigation";
 import { RosterClient } from "@/components/roster/roster-client";
 
 export default async function RosterPage() {
-  const profile = await requireProfile();
-  if (!isStaff(profile)) redirect("/dashboard");
+  await requireProfile();
 
   const supabase = await createClient();
   const { data } = await supabase

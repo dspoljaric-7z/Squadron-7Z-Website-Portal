@@ -56,7 +56,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Staff only
   { href: "/drill",           label: "Drill Roll Call",    iconName: "ClipboardCheck",  requiresStaff: true },
   { href: "/pod",             label: "Plan of the Day",    iconName: "ClipboardList",   roles: ["officer","snco","cadet"] },
-  { href: "/roster",          label: "Roster",             iconName: "Users",           requiresStaff: true },
+  { href: "/roster",          label: "Roster",             iconName: "Users",           roles: ["officer", "snco", "nco", "cadet"] },
   { href: "/billets",         label: "Billets",            iconName: "Award",           roles: ["officer","snco","cadet"] },
   { href: "/nominations",     label: "Nominations",        iconName: "TrendingUp",      requiresSeniorStaff: true },
   { href: "/board-results",   label: "Board Results",      iconName: "Trophy",          requiresStaff: true },
