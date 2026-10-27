@@ -39,6 +39,7 @@ import {
   Map,
   ScrollText,
   DoorOpen,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -82,6 +83,7 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   Map,
   ScrollText,
   DoorOpen,
+  BarChart2,
 };
 
 export function MobileNav({

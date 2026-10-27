@@ -37,7 +37,8 @@ export type NavIconName =
   | "GanttChart"
   | "Map"
   | "ScrollText"
-  | "DoorOpen";
+  | "DoorOpen"
+  | "BarChart2";
 
 export interface NavItem {
   href: string;
@@ -94,6 +95,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/divisions",        label: "Divisions",           iconName: "Layers",           section: "Unit", roles: ["officer","snco"] },
   { href: "/advancement",      label: "Advancement",         iconName: "TrendingUp",       section: "Unit", requiresAdvancement: true },
   { href: "/recruiting",       label: "Recruiting",          iconName: "UserPlus",         section: "Unit", requiresRecruiting: true },
+  { href: "/gallery",          label: "Photo Gallery",       iconName: "Images",           section: "Unit", roles: ["officer","snco","nco","cadet"] },
+  { href: "/report",           label: "Unit Report",         iconName: "BarChart2",        section: "Unit", requiresSeniorStaff: true },
 
   // ── Discipline ────────────────────────────────────────────────────────
   { href: "/discipline",       label: "Discipline",          iconName: "Shield",           section: "Discipline", requiresDiscipline: true },
