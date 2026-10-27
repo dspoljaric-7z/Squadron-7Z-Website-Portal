@@ -57,7 +57,8 @@ export function TswCalendarClient({ initialEntries, profile }: { initialEntries:
   const remove = async (id: string) => {
     if (!confirm("Delete this entry?")) return;
     const supabase = createClient();
-    await supabase.from("tsw_calendar").delete().eq("id", id);
+    const { error } = await supabase.from("tsw_calendar").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
     setEntries((prev) => prev.filter((e) => e.id !== id));
     toast.success("Deleted");
   };

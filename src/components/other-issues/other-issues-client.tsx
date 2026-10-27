@@ -134,7 +134,11 @@ export function OtherIssuesClient({
             <div className="space-y-1.5">
               <Label>Related Cadet (optional)</Label>
               <Select value={form.cadet_id || "_none"} onValueChange={(v) => setForm({ ...form, cadet_id: !v || v === "_none" ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="Unit-wide (no specific cadet)" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unit-wide (no specific cadet)">
+                    {form.cadet_id ? (() => { const c = cadets.find((x) => x.id === form.cadet_id); return c ? `${c.rank ? c.rank + " " : ""}${c.full_name}` : null; })() : "Unit-wide"}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">Unit-wide</SelectItem>
                   {cadets.map((c) => <SelectItem key={c.id} value={c.id}>{c.rank ? `${c.rank} ` : ""}{c.full_name}</SelectItem>)}

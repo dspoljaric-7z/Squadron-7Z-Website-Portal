@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { login } from "@/app/(auth)/actions";
-import { signInWithGoogle } from "@/app/(auth)/oauth-actions";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   oauth_denied: "Google sign-in was cancelled.",
   oauth_error: "Something went wrong with Google sign-in. Try again.",
   not_authorized: "Your Google account is not on the approved access list. Contact an officer.",
+  link_expired: "This activation link has expired or already been used. Ask an officer to send a new one.",
 };
 
 export function LoginForm({ registered, oauthError }: { registered?: boolean; oauthError?: string }) {
@@ -21,8 +22,18 @@ export function LoginForm({ registered, oauthError }: { registered?: boolean; oa
 
   const handleGoogle = async () => {
     setGooglePending(true);
-    await signInWithGoogle();
-    setGooglePending(false);
+    const supabase = createClient();
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (oauthError) {
+      setError(ERROR_MESSAGES.oauth_error);
+      setGooglePending(false);
+    }
+    // On success the browser navigates away; no need to reset pending
   };
 
   return (

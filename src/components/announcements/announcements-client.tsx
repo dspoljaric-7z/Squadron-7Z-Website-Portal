@@ -25,8 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PRIORITY_COLORS } from "@/lib/constants";
-import type { Announcement, AnnouncementPriority, Profile } from "@/types/database";
+import type { Announcement, AnnouncementPriority, AnnouncementAudience, Profile } from "@/types/database";
 import { Pencil, Plus, Trash2, Image as ImageIcon, CheckCheck } from "lucide-react";
+import { HintButton } from "@/components/shared/hint-button";
+
+const ANNOUNCEMENTS_HINTS = [
+  { heading: "Posting an announcement", body: "Click 'New Announcement', write the title and body, choose the audience (All, Officers, Staff, Cadets, or Parents), set a priority (Low/Normal/High/Urgent), and Save." },
+  { heading: "Audiences", body: "All = everyone who can log in. Staff = officers + SNCOs + NCOs. Choose carefully — cadets and parents see their respective feeds on the dashboard." },
+  { heading: "From the Plan of Day", body: "On the SQ7Z POD page, staff can click 'Publish as Announcement' to auto-create an announcement from that day's plan. Useful for morning distribution." },
+  { heading: "Editing & deleting", body: "Click the pencil icon to edit an existing announcement or the trash icon to delete it. Deletions are permanent." },
+];
 import { isStaff } from "@/lib/permissions";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -61,7 +69,20 @@ export function AnnouncementsClient({
       .select("announcement_id")
       .eq("profile_id", profile.id)
       .then(({ data }) => {
-        if (data) setReadIds(new Set(data.map((r) => r.announcement_id)));
+        if (data) {
+          const existingIds = new Set(data.map((r: { announcement_id: string }) => r.announcement_id));
+          setReadIds(existingIds);
+          // Auto-mark all visible announcements as read on page visit
+          const unread = initialAnnouncements
+            .filter((a) => !existingIds.has(a.id))
+            .map((a) => ({ announcement_id: a.id, profile_id: profile.id }));
+          if (unread.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            supabase.from("announcement_reads" as any).upsert(unread, { onConflict: "profile_id,announcement_id", ignoreDuplicates: true }).then(() => {
+              setReadIds(new Set(initialAnnouncements.map((a) => a.id)));
+            });
+          }
+        }
       });
 
     if (isStaffMember) {
@@ -131,6 +152,7 @@ export function AnnouncementsClient({
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-[#003087]">Announcements</h1>
           <LiveIndicator />
+          <HintButton title="Announcements" hints={ANNOUNCEMENTS_HINTS} />
         </div>
         {canPost && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -157,6 +179,11 @@ export function AnnouncementsClient({
                     {a.priority !== "general" && (
                       <Badge className={cn("capitalize", PRIORITY_COLORS[a.priority])}>{a.priority}</Badge>
                     )}
+                    {a.audience && a.audience !== "all" && (
+                      <Badge variant="outline" className="text-[10px] text-gray-500">
+                        {{ officers_sncOs: "Officers & SNCOs", ncos_plus: "NCOs+", cadets_only: "Cadets" }[a.audience]}
+                      </Badge>
+                    )}
                     {isStaffMember && needsAck && (
                       <span className="ml-auto text-xs text-gray-400 flex items-center gap-1">
                         <CheckCheck className="h-3 w-3" />
@@ -165,7 +192,7 @@ export function AnnouncementsClient({
                     )}
                   </div>
                   <p className="mb-2 text-xs text-gray-400">
-                    {a.profiles?.full_name ?? "Staff"} &middot; {format(new Date(a.created_at), "MMM d, yyyy 'at' h:mm a")}
+                    {a.profiles?.full_name ?? "Staff"} &middot; {format(new Date(a.created_at), "MMM d, yyyy 'at' HH:mm")}
                     {a.updated_at !== a.created_at && " (edited)"}
                   </p>
                   {a.image_url && (
@@ -223,7 +250,9 @@ function AnnouncementForm({
   const [title, setTitle] = useState(announcement?.title ?? "");
   const [body, setBody] = useState(announcement?.body ?? "");
   const [priority, setPriority] = useState<AnnouncementPriority>(announcement?.priority ?? "general");
+  const [audience, setAudience] = useState<AnnouncementAudience>(announcement?.audience ?? "all");
   const [imageUrl, setImageUrl] = useState(announcement?.image_url ?? "");
+  const [expiresAt, setExpiresAt] = useState(announcement?.expires_at ? announcement.expires_at.split("T")[0] : "");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -248,14 +277,15 @@ function AnnouncementForm({
       return;
     }
     setSaving(true);
-    const supabase = createClient();
-    const payload = { title, body, priority, image_url: imageUrl || null };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = createClient() as any;
+    const payload = { title, body, priority, audience, image_url: imageUrl || null, expires_at: expiresAt ? new Date(expiresAt + "T23:59:59").toISOString() : null };
 
     let error;
     if (announcement) {
-      ({ error } = await supabase.from("announcements").update(payload).eq("id", announcement.id));
+      ({ error } = await sb.from("announcements").update(payload).eq("id", announcement.id));
     } else {
-      ({ error } = await supabase.from("announcements").insert({ ...payload, posted_by: profile.id }));
+      ({ error } = await sb.from("announcements").insert({ ...payload, posted_by: profile.id }));
     }
     setSaving(false);
     if (error) {
@@ -290,6 +320,28 @@ function AnnouncementForm({
               <SelectItem value="urgent">Urgent</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Audience</Label>
+          <Select value={audience} onValueChange={(v) => setAudience(v as AnnouncementAudience)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Everyone</SelectItem>
+              <SelectItem value="officers_sncOs">Officers &amp; SNCOs only</SelectItem>
+              <SelectItem value="ncos_plus">NCOs, SNCOs &amp; Officers</SelectItem>
+              <SelectItem value="cadets_only">Cadets only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Expires on (optional — leave blank to never expire)</Label>
+          <input
+            type="date"
+            value={expiresAt}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+          />
         </div>
         <div className="space-y-2">
           <Label>Image (optional)</Label>

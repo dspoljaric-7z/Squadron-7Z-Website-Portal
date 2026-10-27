@@ -8,14 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Key, Shield, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { Profile, AllowedEmail, UserRole } from "@/types/database";
 
 type AllowedRow = AllowedEmail;
-type ProfileRow = Pick<Profile, "id" | "full_name" | "role" | "is_command" | "is_maa" | "active" | "approved"> & { email: string };
+type SectionFlag = "can_manage_recruiting" | "can_manage_advancement" | "can_manage_drills" | "can_manage_discipline" | "can_manage_ideas" | "can_manage_pod";
+type BilletFlag = "is_lcpo" | "is_alpo" | "is_ops" | "is_yeoman";
+type ProfileRow = Pick<Profile, "id" | "full_name" | "role" | "is_command" | "is_maa" | "is_yeoman" | "is_ops" | "is_alpo" | "is_lcpo" | "can_manage_recruiting" | "can_manage_advancement" | "can_manage_drills" | "can_manage_discipline" | "can_manage_ideas" | "can_manage_pod" | "active" | "approved"> & { email: string };
 
 const ROLE_LABELS: Record<UserRole, string> = {
   cadet: "Cadet",
@@ -43,12 +44,14 @@ export function AccessClient({
   currentProfile: Profile;
 }) {
   const [allowed, setAllowed] = useState(initialAllowed);
+  const [profilesList, setProfiles] = useState(profiles);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ email: "", role: "cadet" as UserRole, full_name: "" });
   const [search, setSearch] = useState("");
+  const [accessTab, setAccessTab] = useState<"allowed" | "profiles">("allowed");
 
-  const filteredProfiles = profiles.filter(
+  const filteredProfiles = profilesList.filter(
     (p) =>
       !search ||
       p.full_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -87,10 +90,19 @@ export function AccessClient({
     toast.success("Role updated");
   };
 
-  const toggleFlag = async (profileId: string, field: "is_command" | "is_maa", current: boolean) => {
+  const toggleFlag = async (profileId: string, field: "is_command" | "is_maa" | BilletFlag | SectionFlag, current: boolean) => {
     const supabase = createClient();
-    await supabase.from("profiles").update({ [field]: !current } as never).eq("id", profileId);
-    toast.success(`${field === "is_command" ? "Command" : "MAA"} flag ${!current ? "granted" : "revoked"}`);
+    const { error } = await supabase.from("profiles").update({ [field]: !current } as never).eq("id", profileId);
+    if (error) { toast.error(error.message); return; }
+    setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, [field]: !current } : p));
+    const labels: Record<string, string> = {
+      is_command: "Command", is_maa: "MAA",
+      is_lcpo: "LCPO", is_alpo: "ALPO", is_ops: "OPS", is_yeoman: "Yeoman",
+      can_manage_recruiting: "Recruiting", can_manage_advancement: "Advancement",
+      can_manage_drills: "Drills", can_manage_discipline: "Discipline", can_manage_ideas: "Ideas",
+      can_manage_pod: "Plan of Day",
+    };
+    toast.success(`${labels[field] ?? field} ${!current ? "granted" : "revoked"}`);
   };
 
   const filteredAllowed = allowed.filter(
@@ -123,13 +135,26 @@ export function AccessClient({
         className="max-w-sm"
       />
 
-      <Tabs defaultValue="allowed">
-        <TabsList>
-          <TabsTrigger value="allowed">Allow List ({allowed.length})</TabsTrigger>
-          <TabsTrigger value="profiles">Active Profiles ({profiles.length})</TabsTrigger>
-        </TabsList>
+      <div>
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex">
+            {(["allowed", "profiles"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setAccessTab(t)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  accessTab === t
+                    ? "border-[#003087] text-[#003087]"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {t === "allowed" ? `Allow List (${allowed.length})` : `Active Profiles (${profiles.length})`}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-        <TabsContent value="allowed" className="mt-3 space-y-2">
+        {accessTab === "allowed" && <div className="mt-3 space-y-2">
           <p className="text-xs text-gray-500 mb-3">
             Only emails on this list can sign in via Google OAuth. Add an email before asking someone to join.
           </p>
@@ -160,14 +185,14 @@ export function AccessClient({
               </Card>
             );
           })}
-        </TabsContent>
+        </div>}
 
-        <TabsContent value="profiles" className="mt-3 space-y-2">
+        {accessTab === "profiles" && <div className="mt-3 space-y-2">
           <p className="text-xs text-gray-500 mb-3">
-            Manage roles and command/MAA flags for users who have already signed in.
+            Manage roles, command flags, and section access for users who have already signed in.
           </p>
           {filteredProfiles.map((p) => (
-            <Card key={p.id} className="p-4">
+            <Card key={p.id} className="p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-gray-900">{p.full_name}</p>
@@ -201,10 +226,70 @@ export function AccessClient({
                   </Button>
                 </div>
               </div>
+              {/* Cadet billet flags */}
+              {p.role !== "officer" && (
+                <div className="border-t pt-2.5">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cadet Billets</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { field: "is_lcpo"   as BilletFlag, label: "LCPO"   },
+                      { field: "is_alpo"   as BilletFlag, label: "ALPO"   },
+                      { field: "is_ops"    as BilletFlag, label: "OPS"    },
+                      { field: "is_yeoman" as BilletFlag, label: "Yeoman" },
+                    ]).map(({ field, label }) => {
+                      const active = !!p[field];
+                      return (
+                        <button
+                          key={field}
+                          onClick={() => toggleFlag(p.id, field, active)}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                            active
+                              ? "border-amber-600 bg-amber-600 text-white"
+                              : "border-gray-200 bg-white text-gray-500 hover:border-gray-400"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Section permissions — only show for non-officer roles where delegation makes sense */}
+              {p.role !== "officer" && (
+                <div className="border-t pt-2.5">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Section Access</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { field: "can_manage_drills"      as SectionFlag, label: "Drills"       },
+                      { field: "can_manage_discipline"   as SectionFlag, label: "Discipline"   },
+                      { field: "can_manage_advancement"  as SectionFlag, label: "Advancement"  },
+                      { field: "can_manage_recruiting"   as SectionFlag, label: "Recruiting"   },
+                      { field: "can_manage_ideas"        as SectionFlag, label: "Ideas"        },
+                      { field: "can_manage_pod"          as SectionFlag, label: "Plan of Day"  },
+                    ]).map(({ field, label }) => {
+                      const active = !!p[field];
+                      return (
+                        <button
+                          key={field}
+                          onClick={() => toggleFlag(p.id, field, active)}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                            active
+                              ? "border-[#003087] bg-[#003087] text-white"
+                              : "border-gray-200 bg-white text-gray-500 hover:border-gray-400"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </Card>
           ))}
-        </TabsContent>
-      </Tabs>
+        </div>}
+      </div>
 
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="sm:max-w-sm">

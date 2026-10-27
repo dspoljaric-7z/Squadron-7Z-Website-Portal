@@ -9,7 +9,7 @@ export default async function DivisionsPage() {
 
   const supabase = await createClient();
   const [divisionsRes, membersRes] = await Promise.all([
-    supabase.from("divisions").select("*").order("name"),
+    supabase.from("divisions").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("name"),
     supabase
       .from("profiles")
       .select("id, full_name, rank, role, division_id, billet, avatar_url")

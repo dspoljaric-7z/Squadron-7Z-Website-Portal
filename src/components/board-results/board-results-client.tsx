@@ -269,7 +269,9 @@ export function BoardResultsClient({
               <Label>Cadet *</Label>
               <Select value={form.cadet_id} onValueChange={(v) => setForm((f) => ({ ...f, cadet_id: v ?? "" }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select cadet" />
+                  <SelectValue placeholder="Select cadet">
+                    {form.cadet_id ? (() => { const c = cadets.find((x) => x.id === form.cadet_id); return c ? `${lastFirst(c.full_name)}${c.rank ? ` (${c.rank})` : ""}` : null; })() : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {sortedCadets.map((c) => (

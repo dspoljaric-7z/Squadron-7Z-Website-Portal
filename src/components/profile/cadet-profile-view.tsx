@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { LiveIndicator } from "@/components/shared/live-indicator";
@@ -21,7 +22,8 @@ import {
 import { ATTENDANCE_COLORS } from "@/lib/constants";
 import { initials, roleLabel, computedTrainingPhase, allBillets } from "@/lib/format";
 import type { Attendance, Profile, StaffNote, BoardResultRow, UniformInspectionResult, UniformInspectionSession } from "@/types/database";
-import { Pencil, Trophy, Shirt } from "lucide-react";
+import { Pencil, Trophy, Shirt, CheckSquare, Square, FileWarning, ClipboardList } from "lucide-react";
+import { ChecklistClient } from "@/components/cadets/checklist-client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -40,6 +42,11 @@ const BOARD_RESULT_LABELS: Record<string, string> = {
   deferred: "Deferred",
 };
 
+type QualEntry = { qual_type_id: string; status: string; completed_at: string | null };
+type QualType = { id: string; name: string; sort_order: number | null };
+type PipEntry = { id: string; status: string; root_cause: string; timeline: string; goals: string; created_at: string; closed_at?: string | null; supervisor?: { full_name: string; rank: string | null } | null };
+type DocEntry = { id: string; document_type_id: string; collected_at: string; expiry_date: string | null; status: string; document_types?: { name: string; frequency: string } | null };
+
 export function CadetProfileView({
   viewer,
   cadet,
@@ -47,6 +54,12 @@ export function CadetProfileView({
   initialNotes,
   initialBoardResults = [],
   initialInspectionResults = [],
+  initialQuals = [],
+  qualTypes = [],
+  initialPips = [],
+  initialDocs = [],
+  initialChecklists = [],
+  canEditChecklist = false,
 }: {
   viewer: Profile;
   cadet: Profile;
@@ -54,6 +67,12 @@ export function CadetProfileView({
   initialNotes: StaffNoteWithAuthor[];
   initialBoardResults?: BoardResultRow[];
   initialInspectionResults?: InspectionResultWithSession[];
+  initialQuals?: QualEntry[];
+  qualTypes?: QualType[];
+  initialPips?: PipEntry[];
+  initialDocs?: DocEntry[];
+  initialChecklists?: { id: string; cadet_id: string; type: string; step: string; completed: boolean; completed_at: string | null; completed_by: string | null; notes: string | null }[];
+  canEditChecklist?: boolean;
 }) {
   const isOwner = viewer.id === cadet.id;
   const isStaff = viewer.role === "officer" || viewer.role === "snco" || viewer.role === "nco";
@@ -119,10 +138,19 @@ export function CadetProfileView({
 
   const saveRankBillet = async () => {
     const supabase = createClient();
+    const prevRank = cadet.rank;
     const { error } = await supabase.from("profiles").update({ rank, billet, billet_2: billet2 || null, billet_3: billet3 || null }).eq("id", cadet.id);
     if (error) {
       toast.error("Failed to update profile");
       return;
+    }
+    if (rank && rank !== prevRank) {
+      await supabase.from("notifications").insert({
+        profile_id: cadet.id,
+        type: "rank_advance",
+        title: `Congratulations — you've advanced to ${rank}`,
+        body: "Your rank has been updated in the portal. Well done.",
+      });
     }
     toast.success("Profile updated");
     setEditOpen(false);
@@ -148,12 +176,42 @@ export function CadetProfileView({
   const present = attendance.filter((a) => a.status === "present").length;
   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
 
+  const missingFields = [
+    !cadet.rank && "Rank / Rate",
+    !cadet.contact_phone && "Phone number",
+    !cadet.join_date && "Join date",
+    !cadet.division_id && "Division",
+  ].filter(Boolean) as string[];
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold text-gray-900">{isOwner ? "My Profile" : `${roleLabel(cadet.role)} Profile`}</h1>
-        <LiveIndicator />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-900">{isOwner ? "My Profile" : `${roleLabel(cadet.role)} Profile`}</h1>
+          <LiveIndicator />
+        </div>
+        {isStaff && (
+          <Link
+            href={`/cadets/${cadet.id}/report`}
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-[#003087] hover:bg-[#003087]/5 transition-colors"
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Report Card
+          </Link>
+        )}
       </div>
+
+      {missingFields.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-800">
+            {isOwner ? "Your profile is incomplete" : "Profile incomplete"}
+          </p>
+          <p className="mt-0.5 text-xs text-amber-700">
+            Missing: {missingFields.join(", ")}.{" "}
+            {isOwner ? "Ask your chain of command to update it." : ""}
+          </p>
+        </div>
+      )}
 
       <Card className="p-4">
         <div className="flex items-start justify-between gap-3">
@@ -309,6 +367,95 @@ export function CadetProfileView({
         </Card>
       )}
 
+      {/* Qualifications */}
+      {qualTypes.length > 0 && cadet.role !== "officer" && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <CheckSquare className="h-4 w-4 text-[#003087]" />
+            <h3 className="font-semibold">Qualifications</h3>
+            <span className="ml-auto text-xs text-gray-400">
+              {initialQuals.filter((q) => q.status === "completed").length} / {qualTypes.length} completed
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {qualTypes.map((qt) => {
+              const q = initialQuals.find((e) => e.qual_type_id === qt.id);
+              const done = q?.status === "completed";
+              return (
+                <div key={qt.id} className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm ${done ? "text-gray-700" : "text-gray-400"}`}>
+                  {done ? (
+                    <CheckSquare className="h-4 w-4 shrink-0 text-green-500" />
+                  ) : (
+                    <Square className="h-4 w-4 shrink-0 text-gray-300" />
+                  )}
+                  <span className={done ? "" : "opacity-60"}>{qt.name}</span>
+                  {done && q?.completed_at && (
+                    <span className="ml-auto text-xs text-gray-400">{format(new Date(q.completed_at), "MMM d, yy")}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* PIPs */}
+      {isStaff && initialPips.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-amber-500" />
+            <h3 className="font-semibold">Performance Improvement Plans</h3>
+          </div>
+          <div className="space-y-2">
+            {initialPips.map((pip) => (
+              <div key={pip.id} className={`rounded-md border p-3 text-sm ${pip.status === "closed" ? "bg-gray-50" : "bg-amber-50 border-amber-200"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">Opened {format(new Date(pip.created_at), "MMM d, yyyy")}</span>
+                  <Badge variant="outline" className={
+                    pip.status === "closed" ? "bg-green-100 text-green-800 border-green-300" :
+                    pip.status === "pending_ack" ? "bg-blue-100 text-blue-800 border-blue-300" :
+                    "bg-amber-100 text-amber-800 border-amber-300"
+                  }>
+                    {pip.status === "pending_ack" ? "Pending Ack" : pip.status}
+                  </Badge>
+                </div>
+                {pip.root_cause && <p className="mt-1 text-xs text-gray-500">Cause: {pip.root_cause}</p>}
+                {pip.supervisor && <p className="mt-0.5 text-xs text-gray-400">Supervisor: {pip.supervisor.rank ? pip.supervisor.rank + " " : ""}{pip.supervisor.full_name}</p>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Documents */}
+      {isStaff && initialDocs.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <FileWarning className="h-4 w-4 text-[#003087]" />
+            <h3 className="font-semibold">Document Submissions</h3>
+          </div>
+          <div className="space-y-1">
+            {initialDocs.slice(0, 10).map((d) => {
+              const today = new Date().toISOString().split("T")[0];
+              const expired = d.expiry_date && d.expiry_date < today;
+              return (
+                <div key={d.id} className={`flex items-center justify-between rounded px-2 py-1.5 text-sm ${expired ? "bg-amber-50" : ""}`}>
+                  <span>{d.document_types?.name ?? "Document"}</span>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <span>Collected {format(new Date(d.collected_at), "MMM d, yy")}</span>
+                    {d.expiry_date && (
+                      <span className={expired ? "font-semibold text-amber-600" : ""}>
+                        Exp {format(new Date(d.expiry_date), "MMM d, yy")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {isStaff && (
         <Card>
           <CardHeader>
@@ -327,7 +474,7 @@ export function CadetProfileView({
                 <div key={n.id} className="rounded-md border bg-gray-50 p-2 text-sm">
                   <p>{n.note_body}</p>
                   <p className="mt-1 text-xs text-gray-400">
-                    {n.profiles?.full_name ?? "Staff"} &middot; {format(new Date(n.created_at), "MMM d, yyyy h:mm a")}
+                    {n.profiles?.full_name ?? "Staff"} &middot; {format(new Date(n.created_at), "MMM d, yyyy HH:mm")}
                   </p>
                 </div>
               ))}
@@ -336,6 +483,27 @@ export function CadetProfileView({
           </CardContent>
         </Card>
       )}
+
+      {/* In-processing & separation checklists (staff/Yeoman only) */}
+      {isStaff && initialChecklists !== undefined && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ChecklistClient
+            cadetId={cadet.id}
+            cadetName={cadet.full_name}
+            type="onboarding"
+            initialRows={initialChecklists.filter((c) => c.type === "onboarding") as never}
+            canEdit={canEditChecklist}
+          />
+          <ChecklistClient
+            cadetId={cadet.id}
+            cadetName={cadet.full_name}
+            type="separation"
+            initialRows={initialChecklists.filter((c) => c.type === "separation") as never}
+            canEdit={canEditChecklist}
+          />
+        </div>
+      )}
     </div>
   );
 }
+

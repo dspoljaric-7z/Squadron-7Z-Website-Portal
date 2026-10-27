@@ -5,6 +5,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   training: "Training Evolution",
   ceremony: "Ceremony",
   community_service: "Community Service",
+  outreach: "Outreach Event",
   other: "Other",
 };
 
@@ -13,6 +14,7 @@ export const EVENT_TYPE_COLORS: Record<EventType, string> = {
   training: "bg-blue-100 text-blue-800",
   ceremony: "bg-[#B8860B] text-white",
   community_service: "bg-green-100 text-green-800",
+  outreach: "bg-purple-100 text-purple-800",
   other: "bg-gray-100 text-gray-800",
 };
 
@@ -95,8 +97,6 @@ export const RANK_PHASE: Record<string, string> = {
   "PO2": "Phase III — Petty Officer",
   "PO1": "Phase IV — Senior Petty Officer",
   "CPO": "Phase IV — Senior Petty Officer",
-  "SCPO": "Phase IV — Senior Petty Officer",
-  "MCPO": "Phase IV — Senior Petty Officer",
 };
 
 // Qualification types

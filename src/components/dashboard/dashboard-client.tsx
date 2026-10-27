@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LiveIndicator } from "@/components/shared/live-indicator";
 import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/format";
-import type { Announcement, Attendance, Event, PlanOfDay, Profile } from "@/types/database";
+import type { Announcement, Attendance, Event, PlanOfDay, Profile, SavedLink } from "@/types/database";
 import {
   CalendarDays,
   Megaphone,
@@ -16,6 +16,7 @@ import {
   ClipboardList,
   ChevronRight,
   AlertCircle,
+  AlertTriangle,
   Bell,
   Clock,
   MapPin,
@@ -25,8 +26,20 @@ import {
   CheckSquare,
   Shield,
   BookOpen,
+  FileWarning,
+  Activity,
+  BarChart2,
+  FileText,
+  Shirt,
+  Award,
+  Link2,
+  ExternalLink,
+  CalendarOff,
+  Ship,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
-import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
+import { format, formatDistanceToNow, isToday, isTomorrow, differenceInDays } from "date-fns";
 
 type AnnouncementWithAuthor = Announcement & {
   profiles: { full_name: string; rank: string | null } | null;
@@ -56,6 +69,7 @@ export function DashboardClient({
   initialEvents,
   initialAnnouncements,
   initialPendingCount,
+  pendingAbsenceCount,
   memberCount,
   todayPod,
   linkedCadet = null,
@@ -67,11 +81,29 @@ export function DashboardClient({
   myAttendanceTotal = 0,
   myQualsDone = 0,
   myOpenCorrections = 0,
+  totalQuals = 7,
+  missingDocsCount = 0,
+  unitAttendanceLast3,
+  overdueDocsCount,
+  divisionMemberCount,
+  divisionAttendancePct,
+  expiringPaperworkCount,
+  lcpoOpenPipsCount,
+  lastInspectionDate,
+  vacantBilletsCount,
+  staleAbsenceCount,
+  submittedPodCount,
+  isNewStaff = false,
+  nextDrillSession,
+  nextTswSession,
+  savedLinks = [],
+  recentAbsenceDecisions = [],
 }: {
   profile: Profile;
   initialEvents: Event[];
   initialAnnouncements: AnnouncementWithAuthor[];
   initialPendingCount: number;
+  pendingAbsenceCount?: number;
   memberCount: number;
   todayPod: PlanOfDay | null;
   linkedCadet?: Profile | null;
@@ -83,12 +115,50 @@ export function DashboardClient({
   myAttendanceTotal?: number;
   myQualsDone?: number;
   myOpenCorrections?: number;
+  totalQuals?: number;
+  missingDocsCount?: number;
+  unitAttendanceLast3?: number;
+  overdueDocsCount?: number;
+  divisionMemberCount?: number;
+  divisionAttendancePct?: number;
+  expiringPaperworkCount?: number;
+  lcpoOpenPipsCount?: number;
+  lastInspectionDate?: string | null;
+  vacantBilletsCount?: number;
+  staleAbsenceCount?: number;
+  submittedPodCount?: number;
+  isNewStaff?: boolean;
+  nextDrillSession?: { id: string; date: string; location: string | null; uniform_of_day: string | null; notes: string | null; theme?: string | null } | null;
+  nextTswSession?: { date: string; theme: string | null } | null;
+  savedLinks?: SavedLink[];
+  recentAbsenceDecisions?: { id: string; requested_date: string; request_type: string | null; status: string; review_notes: string | null; created_at: string }[];
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
 
   const isStaff = profile.role === "officer" || profile.role === "snco" || profile.role === "nco";
+
+  function drillCountdown(dateStr: string): string {
+    const drillDate = new Date(dateStr + "T00:00:00");
+    const now = new Date();
+    const days = differenceInDays(drillDate, now);
+    if (days === 0) return "Today";
+    if (days === 1) return "Tomorrow";
+    if (days < 0) return "Past";
+    return `${days} days`;
+  }
+
+  function timeInRate(dateOfRank: string | null): string {
+    if (!dateOfRank) return "—";
+    const days = differenceInDays(new Date(), new Date(dateOfRank));
+    const months = Math.floor(days / 30);
+    if (months < 1) return `${days}d`;
+    if (months < 12) return `${months}mo`;
+    const years = Math.floor(months / 12);
+    const remMonths = months % 12;
+    return remMonths > 0 ? `${years}y ${remMonths}mo` : `${years}y`;
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -222,7 +292,7 @@ export function DashboardClient({
                     <p className="truncate font-semibold text-gray-800">{evt.title}</p>
                     <p className="mt-0.5 text-xs text-gray-400 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {eventDateLabel(evt.start_time)}, {format(new Date(evt.start_time), "h:mm a")}
+                      {eventDateLabel(evt.start_time)}, {format(new Date(evt.start_time), "HH:mm")}
                     </p>
                   </div>
                 </div>
@@ -276,9 +346,125 @@ export function DashboardClient({
         <LiveIndicator />
       </div>
 
+      {/* Officer / SNCO: Unit Health Strip */}
+      {(profile.role === "officer" || profile.role === "snco") && unitAttendanceLast3 !== undefined && (
+        <div className="grid grid-cols-3 gap-3">
+          <Link
+            href="/drill"
+            className="rounded-xl border bg-[#003087] p-4 text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Attendance (3 Drills)</p>
+              <Activity className="h-4 w-4 text-white/30" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold">{unitAttendanceLast3}%</p>
+            <p className="mt-0.5 text-xs text-white/40">unit rate</p>
+          </Link>
+          <Link
+            href="/docs"
+            className={`rounded-xl border p-4 shadow-sm transition-colors hover:border-opacity-50 ${
+              (overdueDocsCount ?? 0) > 0 ? "border-amber-200 bg-amber-50" : "bg-white hover:border-green-300"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <p className={`text-xs font-semibold uppercase tracking-wide ${(overdueDocsCount ?? 0) > 0 ? "text-amber-500" : "text-gray-400"}`}>
+                Expired Docs
+              </p>
+              <FileWarning className={`h-4 w-4 ${(overdueDocsCount ?? 0) > 0 ? "text-amber-500" : "text-gray-300"}`} />
+            </div>
+            <p className={`mt-2 text-3xl font-extrabold ${(overdueDocsCount ?? 0) > 0 ? "text-amber-600" : "text-gray-400"}`}>
+              {overdueDocsCount ?? 0}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-400">expired</p>
+          </Link>
+          <Link
+            href="/report"
+            className="rounded-xl border bg-white p-4 shadow-sm transition-colors hover:border-[#003087]/30"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Unit Report</p>
+              <BarChart2 className="h-4 w-4 text-[#003087]" />
+            </div>
+            <p className="mt-2 text-sm font-bold text-[#003087]">View</p>
+            <p className="mt-0.5 text-xs text-gray-400">printable summary</p>
+          </Link>
+        </div>
+      )}
+
+      {/* LCPO: Unit Health Aggregate */}
+      {profile.is_lcpo && expiringPaperworkCount !== undefined && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border bg-[#003087] p-4 text-white shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Expiring (30d)</p>
+              <FileText className="h-4 w-4 text-white/30" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold">{expiringPaperworkCount}</p>
+            <p className="mt-0.5 text-xs text-white/40">paperwork docs</p>
+          </div>
+          <div className={`rounded-xl border p-4 shadow-sm ${lcpoOpenPipsCount ? "bg-red-50" : "bg-white"}`}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Open PIPs</p>
+              <AlertCircle className={`h-4 w-4 ${lcpoOpenPipsCount ? "text-red-500" : "text-gray-300"}`} />
+            </div>
+            <p className={`mt-2 text-3xl font-extrabold ${lcpoOpenPipsCount ? "text-red-600" : "text-[#003087]"}`}>{lcpoOpenPipsCount ?? 0}</p>
+            <p className="mt-0.5 text-xs text-gray-400">active plans</p>
+          </div>
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Last Inspection</p>
+              <Shirt className="h-4 w-4 text-[#003087]" />
+            </div>
+            <p className="mt-2 text-sm font-bold text-[#003087]">{lastInspectionDate ?? "None"}</p>
+            <p className="mt-0.5 text-xs text-gray-400">most recent drill</p>
+          </div>
+          <div className={`rounded-xl border p-4 shadow-sm ${vacantBilletsCount ? "bg-amber-50" : "bg-white"}`}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Vacant Billets</p>
+              <Award className={`h-4 w-4 ${vacantBilletsCount ? "text-amber-500" : "text-gray-300"}`} />
+            </div>
+            <p className={`mt-2 text-3xl font-extrabold ${vacantBilletsCount ? "text-amber-600" : "text-[#003087]"}`}>{vacantBilletsCount ?? 0}</p>
+            <p className="mt-0.5 text-xs text-gray-400">need assignment</p>
+          </div>
+        </div>
+      )}
+
+      {/* NCO: Division Stats */}
+      {profile.role === "nco" && divisionMemberCount !== undefined && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border bg-[#003087] p-4 text-white shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Division Strength</p>
+              <Users className="h-4 w-4 text-white/30" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold">{divisionMemberCount}</p>
+            <p className="mt-0.5 text-xs text-white/40">active cadets</p>
+          </div>
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Division Att.</p>
+              <Activity className="h-4 w-4 text-[#003087]" />
+            </div>
+            <p className="mt-2 text-3xl font-extrabold text-[#003087]">{divisionAttendancePct ?? 0}%</p>
+            <p className="mt-0.5 text-xs text-gray-400">all-time rate</p>
+          </div>
+          <Link
+            href="/cadets"
+            className="rounded-xl border bg-white p-4 shadow-sm transition-colors hover:border-[#003087]/30"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Division</p>
+              <FileText className="h-4 w-4 text-[#003087]" />
+            </div>
+            <p className="mt-2 text-sm font-bold text-[#003087]">View Roster</p>
+            <p className="mt-0.5 text-xs text-gray-400">your cadets</p>
+          </Link>
+        </div>
+      )}
+
       {/* Personal stats strip — shown for non-staff, non-parent members */}
       {!isStaff && myAttendanceTotal > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {/* Attendance */}
           <Link
             href="/profile"
@@ -306,9 +492,34 @@ export function DashboardClient({
             </div>
             <p className="mt-2 text-3xl font-extrabold text-[#003087]">
               {myQualsDone}
-              <span className="text-lg text-gray-300">/7</span>
+              <span className="text-lg text-gray-300">/{totalQuals}</span>
             </p>
             <p className="mt-0.5 text-xs text-gray-400">completed</p>
+          </Link>
+          {/* Docs */}
+          <Link
+            href="/docs"
+            className={`group rounded-xl border p-4 shadow-sm transition-colors ${
+              missingDocsCount > 0 ? "border-amber-200 bg-amber-50" : "bg-white hover:border-green-300"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <p className={`text-xs font-semibold uppercase tracking-wide ${missingDocsCount > 0 ? "text-amber-500" : "text-gray-400"}`}>
+                Missing Docs
+              </p>
+              <FileWarning className={`h-4 w-4 ${missingDocsCount > 0 ? "text-amber-500" : "text-gray-300"}`} />
+            </div>
+            {missingDocsCount > 0 ? (
+              <>
+                <p className="mt-2 text-3xl font-extrabold text-amber-600">{missingDocsCount}</p>
+                <p className="mt-0.5 text-xs text-amber-500">required</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-xl font-extrabold text-green-600">All Clear</p>
+                <p className="mt-0.5 text-xs text-gray-400">docs up to date</p>
+              </>
+            )}
           </Link>
           {/* Status */}
           <Link
@@ -348,6 +559,160 @@ export function DashboardClient({
                 <p className="mt-0.5 text-xs text-gray-400">no open items</p>
               </>
             )}
+          </Link>
+        </div>
+      )}
+
+      {/* Recent absence request decisions */}
+      {recentAbsenceDecisions.length > 0 && (
+        <div className="rounded-xl border bg-white overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b">
+            <Bell className="h-4 w-4 text-gray-400" />
+            <p className="text-sm font-semibold text-gray-900">Absence Request Updates</p>
+          </div>
+          <div className="divide-y">
+            {recentAbsenceDecisions.map((r) => {
+              const isApproved = r.status === "approved";
+              const typeLabel = r.request_type === "early_leave" ? "Early Leave" : r.request_type === "late_arrival" ? "Late Arrival" : "Absence";
+              return (
+                <div key={r.id} className="flex items-start gap-3 px-4 py-3">
+                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${isApproved ? "bg-green-100" : "bg-red-100"}`}>
+                    {isApproved
+                      ? <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                      : <XCircle className="h-3.5 w-3.5 text-red-500" />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-800">
+                      <span className="font-medium">{typeLabel}</span>{" "}
+                      <span className={isApproved ? "text-green-700 font-medium" : "text-red-600 font-medium"}>
+                        {isApproved ? "approved" : "denied"}
+                      </span>{" "}
+                      for {format(new Date(r.requested_date + "T00:00:00"), "MMM d")}
+                    </p>
+                    {r.review_notes && (
+                      <p className="mt-0.5 text-xs text-gray-500 italic">&ldquo;{r.review_notes}&rdquo;</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t px-4 py-2">
+            <Link href="/my-record" className="text-xs text-[#003087] hover:underline">View all requests →</Link>
+          </div>
+        </div>
+      )}
+
+      {/* Next Drill Countdown card */}
+      {nextDrillSession && (
+        <Link href="/calendar" className="block rounded-xl border border-[#003087]/20 bg-gradient-to-r from-[#003087]/5 to-[#003087]/10 p-4 hover:from-[#003087]/10 hover:to-[#003087]/15 transition-colors">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#003087]/60">Next Drill</p>
+            <CalendarDays className="h-4 w-4 text-[#003087]/40" />
+          </div>
+          <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
+            <div>
+              <p className="text-3xl font-extrabold text-[#003087]">
+                {drillCountdown(nextDrillSession.date)}
+              </p>
+              <p className="text-sm font-medium text-[#003087]/70">
+                {format(new Date(nextDrillSession.date + "T00:00:00"), "EEEE, MMMM d")}
+              </p>
+              {nextDrillSession.theme && (
+                <p className="mt-0.5 text-xs text-[#003087]/60 italic">{nextDrillSession.theme}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-[#003087]/60">
+              {nextDrillSession.location && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {nextDrillSession.location}
+                </span>
+              )}
+              {nextDrillSession.uniform_of_day && (
+                <span className="flex items-center gap-1">
+                  <Shirt className="h-3.5 w-3.5" />
+                  {nextDrillSession.uniform_of_day}
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* TSW Next Meeting Countdown card */}
+      {nextTswSession && (
+        <Link href="/tsw-pod" className="block rounded-xl border border-orange-300/40 bg-gradient-to-r from-orange-50 to-orange-100/50 p-4 hover:from-orange-100/50 hover:to-orange-100 transition-colors">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-600/70">Next TSW Meeting</p>
+            <Ship className="h-4 w-4 text-orange-400/60" />
+          </div>
+          <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
+            <div>
+              <p className="text-3xl font-extrabold text-orange-700">
+                {drillCountdown(nextTswSession.date)}
+              </p>
+              <p className="text-sm font-medium text-orange-600/80">
+                {format(new Date(nextTswSession.date + "T00:00:00"), "EEEE, MMMM d")}
+              </p>
+              {nextTswSession.theme && (
+                <p className="mt-0.5 text-xs text-orange-600/60 italic">{nextTswSession.theme}</p>
+              )}
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Time in rate (personal stats for non-staff, non-parent) */}
+      {!isStaff && profile.role === "cadet" && profile.date_of_rank && (
+        <div className="flex items-center gap-3 rounded-xl border bg-white p-3.5 shadow-sm">
+          <Award className="h-5 w-5 shrink-0 text-[#B8860B]" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Time in Rate</p>
+            <p className="font-bold text-[#003087]">
+              {timeInRate(profile.date_of_rank)}
+              {profile.rank && <span className="ml-1.5 text-sm font-normal text-gray-500">as {profile.rank}</span>}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Saved links */}
+      {savedLinks.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick Links</p>
+          <div className="flex flex-wrap gap-2">
+            {savedLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-[#003087]/30 hover:bg-[#003087]/5 hover:text-[#003087]"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                {link.title}
+              </a>
+            ))}
+            {isStaff && (
+              <Link
+                href="/admin/links"
+                className="flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:border-[#003087]/30 hover:text-[#003087]"
+              >
+                <Plus className="h-3.5 w-3.5" /> Manage Links
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+      {savedLinks.length === 0 && isStaff && (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick Links</p>
+          <Link
+            href="/admin/links"
+            className="flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:border-[#003087]/30 hover:text-[#003087] w-fit"
+          >
+            <Link2 className="h-3.5 w-3.5" /> Add quick links
           </Link>
         </div>
       )}
@@ -416,7 +781,7 @@ export function DashboardClient({
       </div>
 
       {/* Operations summary for command */}
-      {(openCorrectionsCount != null || activePipelinesCount != null) && (
+      {(openCorrectionsCount != null || activePipelinesCount != null || pendingAbsenceCount != null) && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {openCorrectionsCount != null && (
             <Link
@@ -463,6 +828,68 @@ export function DashboardClient({
               <p className="mt-0.5 text-xs text-gray-400">in pipeline</p>
             </Link>
           )}
+          {pendingAbsenceCount != null && (
+            <Link
+              href="/absence-requests"
+              className="rounded-xl border bg-white p-4 shadow-sm hover:border-amber-300 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Absence Requests</p>
+                <Bell className="h-4 w-4 text-amber-500" />
+              </div>
+              <p className={`mt-2 text-3xl font-extrabold ${pendingAbsenceCount > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                {pendingAbsenceCount}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-400">pending review</p>
+            </Link>
+          )}
+        </div>
+      )}
+
+      {/* Stale absence request alert */}
+      {(staleAbsenceCount ?? 0) > 0 && (
+        <Link
+          href="/absence-requests"
+          className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 transition-colors hover:bg-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-600">Overdue Review</p>
+            <p className="font-semibold text-amber-900">
+              {staleAbsenceCount} absence {staleAbsenceCount === 1 ? "request" : "requests"} pending for 3+ days — review now
+            </p>
+          </div>
+        </Link>
+      )}
+
+      {/* Submitted POD approval reminder (CO/XO only) */}
+      {(submittedPodCount ?? 0) > 0 && (
+        <Link
+          href="/pod"
+          className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 transition-colors hover:bg-blue-100"
+        >
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-blue-600">POD Pending Approval</p>
+            <p className="font-semibold text-blue-900">
+              {submittedPodCount} Plan of the Day {submittedPodCount === 1 ? "submission needs" : "submissions need"} your approval
+            </p>
+          </div>
+        </Link>
+      )}
+
+      {/* Getting Started card for new staff (first 30 days) */}
+      {isNewStaff && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-green-700">Getting Started</p>
+          <p className="mt-1 font-semibold text-green-900">Welcome to the staff portal — here&apos;s what to do first:</p>
+          <ol className="mt-2 space-y-1 text-sm text-green-800 list-decimal list-inside">
+            <li>Review the <Link href="/roster" className="underline font-medium">Roster</Link> to learn your cadets&apos; names and ranks</li>
+            <li>Check <Link href="/divisions" className="underline font-medium">Divisions</Link> to see your assigned section</li>
+            <li>Read the latest <Link href="/announcements" className="underline font-medium">Announcements</Link> for standing orders</li>
+            <li>Check the <Link href="/pod" className="underline font-medium">Plan of the Day</Link> before each drill</li>
+            <li>Use the <strong>Help</strong> buttons (?) on each page for step-by-step guidance</li>
+          </ol>
         </div>
       )}
 
@@ -516,51 +943,115 @@ export function DashboardClient({
 
       {/* My Profile link for cadets */}
       {!isStaff && (
-        <Link
-          href="/profile"
-          className="flex items-center justify-between rounded-xl border border-[#003087]/10 bg-[#003087]/5 p-3.5 transition-colors hover:bg-[#003087]/10"
-        >
-          <div className="flex items-center gap-3">
-            <BookOpen className="h-5 w-5 text-[#003087]" />
-            <div>
-              <p className="text-sm font-semibold text-[#003087]">My Profile</p>
-              <p className="text-xs text-[#003087]/60">Attendance, quals &amp; board history</p>
+        <div className="flex flex-col gap-2">
+          <Link
+            href="/profile"
+            className="flex items-center justify-between rounded-xl border border-[#003087]/10 bg-[#003087]/5 p-3.5 transition-colors hover:bg-[#003087]/10"
+          >
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-5 w-5 text-[#003087]" />
+              <div>
+                <p className="text-sm font-semibold text-[#003087]">My Profile</p>
+                <p className="text-xs text-[#003087]/60">Attendance, quals &amp; board history</p>
+              </div>
             </div>
-          </div>
-          <ChevronRight className="h-4 w-4 text-[#003087]/40" />
-        </Link>
+            <ChevronRight className="h-4 w-4 text-[#003087]/40" />
+          </Link>
+          <Link
+            href="/my-record#absence"
+            className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3.5 transition-colors hover:bg-amber-100"
+          >
+            <div className="flex items-center gap-3">
+              <CalendarOff className="h-5 w-5 text-amber-700" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Request Absence / Early Leave</p>
+                <p className="text-xs text-amber-700/70">Submit an absence or excuse request</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-amber-400" />
+          </Link>
+        </div>
       )}
 
-      {/* Quick actions for staff */}
+      {/* Absence / early leave for staff (my record) */}
+      {isStaff && (
+        <div className="flex flex-col gap-2">
+          <Link
+            href="/my-record#absence"
+            className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3.5 transition-colors hover:bg-amber-100"
+          >
+            <div className="flex items-center gap-3">
+              <CalendarOff className="h-5 w-5 text-amber-700" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Request Absence / Early Leave</p>
+                <p className="text-xs text-amber-700/70">Submit a personal absence or early departure request</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-amber-400" />
+          </Link>
+        </div>
+      )}
+
+      {/* Quick actions for staff — role-personalized */}
       {isStaff && (
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick Actions</p>
           <div className="flex flex-wrap gap-2">
-            <Link
-              href="/attendance"
-              className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
-            >
-              <ClipboardCheck className="h-4 w-4" /> Take Attendance
-            </Link>
+            {/* LCPO: Drill Muster is their primary action */}
+            {profile.is_lcpo ? (
+              <Link
+                href="/drill"
+                className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003087]/80"
+              >
+                <ClipboardCheck className="h-4 w-4" /> Drill Muster
+              </Link>
+            ) : (
+              <Link
+                href="/attendance"
+                className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
+              >
+                <ClipboardCheck className="h-4 w-4" /> Take Attendance
+              </Link>
+            )}
             <Link
               href="/announcements"
               className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
             >
               <Megaphone className="h-4 w-4" /> Post Announcement
             </Link>
-            <Link
-              href="/pod"
-              className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
-            >
-              <Plus className="h-4 w-4" /> Edit POD
-            </Link>
-            {(profile.role === "officer" || profile.role === "snco") && (
+            {/* Officers see POD as a priority action */}
+            {(profile.role === "officer") && (
               <Link
-                href={profile.role === "officer" ? "/admin" : "/divisions"}
-                className="flex items-center gap-1.5 rounded-lg border border-[#B8860B]/20 bg-[#B8860B]/5 px-3 py-2 text-sm font-medium text-[#B8860B] transition-colors hover:bg-[#B8860B]/10"
+                href="/pod"
+                className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
               >
-                <UserCheck className="h-4 w-4" /> {profile.role === "officer" ? "Manage Members" : "Divisions"}
+                <ClipboardList className="h-4 w-4" /> Plan of the Day
               </Link>
+            )}
+            {/* NCOs get direct drill attendance */}
+            {profile.role === "nco" && (
+              <Link
+                href="/drill"
+                className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-[#003087]/5 px-3 py-2 text-sm font-medium text-[#003087] transition-colors hover:bg-[#003087]/10"
+              >
+                <Plus className="h-4 w-4" /> Drill Muster
+              </Link>
+            )}
+            {(profile.role === "officer" || profile.role === "snco") && (
+              <>
+                <Link
+                  href="/admin"
+                  className="flex items-center gap-1.5 rounded-lg border border-[#B8860B]/20 bg-[#B8860B]/5 px-3 py-2 text-sm font-medium text-[#B8860B] transition-colors hover:bg-[#B8860B]/10"
+                >
+                  <UserCheck className="h-4 w-4" /> Manage Members
+                </Link>
+                <Link
+                  href="/report"
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
+                >
+                  <BarChart2 className="h-4 w-4" /> Unit Report
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -596,7 +1087,7 @@ export function DashboardClient({
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {eventDateLabel(evt.start_time)},{" "}
-                      {format(new Date(evt.start_time), "h:mm a")}
+                      {format(new Date(evt.start_time), "HH:mm")}
                     </span>
                     {evt.location && (
                       <span className="flex items-center gap-1">

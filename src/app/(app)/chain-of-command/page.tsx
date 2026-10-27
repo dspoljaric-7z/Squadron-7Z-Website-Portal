@@ -2,10 +2,16 @@ import { requireProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { ChainOfCommandClient } from "@/components/chain-of-command/chain-of-command-client";
 
-export default async function ChainOfCommandPage() {
-  await requireProfile();
-  const supabase = await createClient();
+export default async function ChainOfCommandPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const profile = await requireProfile();
+  const params = await searchParams;
+  const defaultTab = params.tab ?? "chain";
 
+  const supabase = await createClient();
   const [billetsRes, profilesRes] = await Promise.all([
     supabase
       .from("billets")
@@ -15,7 +21,7 @@ export default async function ChainOfCommandPage() {
       .order("name", { ascending: true }),
     supabase
       .from("profiles")
-      .select("id, full_name, rank, role, billet")
+      .select("id, full_name, rank, role, billet, avatar_url")
       .eq("active", true)
       .eq("approved", true)
       .in("role", ["officer", "snco", "nco", "cadet"]),
@@ -25,6 +31,8 @@ export default async function ChainOfCommandPage() {
     <ChainOfCommandClient
       billets={billetsRes.data ?? []}
       profiles={profilesRes.data ?? []}
+      profile={profile}
+      defaultTab={defaultTab}
     />
   );
 }

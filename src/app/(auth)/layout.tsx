@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#000d1f] px-4 py-12">
@@ -19,6 +21,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       {/* Content */}
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center">
+
+        {/* Back to main site */}
+        <Link
+          href="/"
+          className="mb-6 flex w-full items-center gap-1.5 text-xs font-semibold text-white/40 hover:text-white/70 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          Back to main site
+        </Link>
 
         {/* Logo + unit name */}
         <div className="mb-8 flex flex-col items-center gap-4 text-center">

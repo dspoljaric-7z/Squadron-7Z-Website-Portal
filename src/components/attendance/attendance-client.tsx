@@ -207,7 +207,11 @@ export function AttendanceClient({
         <div className="flex flex-wrap items-center gap-2">
           <Select value={eventId} onValueChange={(v) => v && setEventId(v)}>
             <SelectTrigger className="w-72">
-              <SelectValue placeholder="Select an event" />
+              <SelectValue placeholder="Select an event">
+                {selectedEvent
+                  ? `${selectedEvent.title} — ${format(new Date(selectedEvent.start_time), "MMM d, yyyy")}`
+                  : null}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {events.map((e) => (

@@ -14,21 +14,34 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Users, Layers, ChevronDown, ChevronRight } from "lucide-react";
+import { HintButton, type HintSection } from "@/components/shared/hint-button";
+
+const DIVISIONS_HINTS: HintSection[] = [
+  {
+    heading: "Creating a Division",
+    body: "Click 'New Division,' give it a name (e.g. Alpha, Bravo, Charlie), pick a color, and save. Divisions group cadets under an NCO for attendance and accountability.",
+  },
+  {
+    heading: "Assigning Members",
+    body: "Use the 'Assign Members' panel to drag or click cadets into a division. Members can only belong to one division at a time. Unassigned members appear at the top.",
+  },
+  {
+    heading: "NCO Responsibility",
+    body: "The NCO assigned to a division is responsible for marking attendance at drill, tracking their cadets' progress, and reporting issues to the OOD or XO.",
+  },
+  {
+    heading: "Editing or Deleting",
+    body: "Click the pencil icon on a division to rename it or change its color. Deleting a division unassigns all its members — they will appear as unassigned until re-assigned.",
+  },
+];
 import { initials, lastFirst, byLastName, roleLabel, ROLE_ORDER } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Division, Profile } from "@/types/database";
 
 const DIVISION_COLORS = [
-  "#003087", "#B8860B", "#1d6b1d", "#8b0000", "#4b0082",
+  "#003087", "#B8860B", "#1d6b1d", "#dc2626", "#8b0000", "#4b0082",
   "#006080", "#7a4000", "#555555",
 ];
 
@@ -126,18 +139,28 @@ export function DivisionsClient({
     setMemberDivisions((prev) => ({ ...prev, [memberId]: divisionId }));
   };
 
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+
   const sortedMembers = [...members].sort(
     (a, b) => (ROLE_ORDER[a.role] ?? 99) - (ROLE_ORDER[b.role] ?? 99)
   );
 
   const unassigned = sortedMembers.filter((m) => !memberDivisions[m.id]);
 
+  const handleAssign = async (memberId: string, divisionId: string | null) => {
+    await assignMember(memberId, divisionId);
+    setEditingMemberId(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#003087]">Divisions</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#003087]">Divisions</h1>
+            <HintButton title="Divisions" hints={DIVISIONS_HINTS} />
+          </div>
           <p className="mt-0.5 text-sm text-gray-500">
             Organize members into operational divisions
           </p>
@@ -250,52 +273,77 @@ export function DivisionsClient({
         <div>
           <h2 className="mb-3 text-lg font-bold text-[#003087]">Assign Members</h2>
           <Card className="divide-y overflow-hidden">
-            {[...sortedMembers].sort(byLastName).map((member) => (
-              <div key={member.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className="bg-[#003087] text-xs text-white">
-                      {initials(member.full_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{lastFirst(member.full_name)}</p>
-                    <p className="text-xs text-gray-400">
-                      {[member.rank, member.billet].filter(Boolean).join(" · ") || roleLabel(member.role)}
-                    </p>
+            {[...sortedMembers].sort(byLastName).map((member) => {
+              const divId = memberDivisions[member.id];
+              const div = divId ? divisions.find((d) => d.id === divId) : null;
+              const isEditing = editingMemberId === member.id;
+              return (
+                <div key={member.id} className="px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarFallback className="bg-[#003087] text-xs text-white">
+                          {initials(member.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{lastFirst(member.full_name)}</p>
+                        <p className="text-xs text-gray-400">
+                          {[member.rank, member.billet].filter(Boolean).join(" · ") || roleLabel(member.role)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setEditingMemberId(isEditing ? null : member.id)}
+                      className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors hover:opacity-80"
+                      style={
+                        div
+                          ? { backgroundColor: (div.color ?? "#003087") + "22", color: div.color ?? "#003087", border: `1px solid ${div.color ?? "#003087"}44` }
+                          : { backgroundColor: "#f3f4f6", color: "#9ca3af", border: "1px solid #e5e7eb" }
+                      }
+                    >
+                      {div && (
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: div.color ?? "#003087" }}
+                        />
+                      )}
+                      {div ? div.name : "Unassigned"}
+                      <Pencil className="h-2.5 w-2.5 ml-0.5 opacity-60" />
+                    </button>
                   </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {memberDivisions[member.id] && (
-                    <div
-                      className="h-2 w-2 rounded-full"
-                      style={{
-                        backgroundColor:
-                          divisions.find((d) => d.id === memberDivisions[member.id])?.color ?? "#003087",
-                      }}
-                    />
-                  )}
-                  <Select
-                    value={memberDivisions[member.id] ?? "none"}
-                    onValueChange={(v) => assignMember(member.id, v === "none" ? null : v)}
-                  >
-                    <SelectTrigger className="h-8 w-40 text-xs">
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        <span className="text-gray-400">— Unassigned —</span>
-                      </SelectItem>
+                  {isEditing && (
+                    <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
+                      <button
+                        onClick={() => handleAssign(member.id, null)}
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+                          !divId
+                            ? "bg-gray-200 text-gray-700 border-gray-300"
+                            : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                        )}
+                      >
+                        Unassigned
+                      </button>
                       {divisions.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
+                        <button
+                          key={d.id}
+                          onClick={() => handleAssign(member.id, d.id)}
+                          className="rounded-full px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                          style={
+                            divId === d.id
+                              ? { backgroundColor: d.color ?? "#003087", color: "#fff" }
+                              : { backgroundColor: (d.color ?? "#003087") + "22", color: d.color ?? "#003087", border: `1px solid ${d.color ?? "#003087"}44` }
+                          }
+                        >
                           {d.name}
-                        </SelectItem>
+                        </button>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {members.length === 0 && (
               <p className="p-6 text-center text-sm text-gray-400">No active members found.</p>
             )}

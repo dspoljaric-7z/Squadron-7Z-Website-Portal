@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Clock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +27,7 @@ const DIFFICULTY_COLORS = {
 export function IdeasClient({ initialIdeas, profile }: { initialIdeas: IdeaRow[]; profile: Profile }) {
   const [ideas, setIdeas] = useState(initialIdeas);
   const [showNew, setShowNew] = useState(false);
+  const [ideaTab, setIdeaTab] = useState<IdeaCategory>("drill");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     category: "drill" as IdeaCategory,
@@ -68,7 +68,8 @@ export function IdeasClient({ initialIdeas, profile }: { initialIdeas: IdeaRow[]
   const remove = async (id: string) => {
     if (!confirm("Delete this idea?")) return;
     const supabase = createClient();
-    await supabase.from("activity_ideas").delete().eq("id", id);
+    const { error } = await supabase.from("activity_ideas").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
     setIdeas((prev) => prev.filter((i) => i.id !== id));
     toast.success("Deleted");
   };
@@ -115,25 +116,33 @@ export function IdeasClient({ initialIdeas, profile }: { initialIdeas: IdeaRow[]
         </Button>
       </div>
 
-      <Tabs defaultValue="drill">
-        <TabsList>
-          {(["drill", "stem", "service"] as IdeaCategory[]).map((cat) => (
-            <TabsTrigger key={cat} value={cat}>
-              {IDEA_CATEGORY_LABELS[cat]} ({forCategory(cat).length})
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {(["drill", "stem", "service"] as IdeaCategory[]).map((cat) => (
-          <TabsContent key={cat} value={cat} className="mt-3 space-y-3">
-            {forCategory(cat).length === 0 && (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-gray-400">
-                No {IDEA_CATEGORY_LABELS[cat]} ideas yet. Add one above.
-              </div>
-            )}
-            {forCategory(cat).map((idea) => <IdeaCard key={idea.id} idea={idea} />)}
-          </TabsContent>
-        ))}
-      </Tabs>
+      <div>
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex">
+            {(["drill", "stem", "service"] as IdeaCategory[]).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setIdeaTab(cat)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  ideaTab === cat
+                    ? "border-[#003087] text-[#003087]"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {IDEA_CATEGORY_LABELS[cat]} ({forCategory(cat).length})
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="mt-3 space-y-3">
+          {forCategory(ideaTab).length === 0 && (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-gray-400">
+              No {IDEA_CATEGORY_LABELS[ideaTab]} ideas yet. Add one above.
+            </div>
+          )}
+          {forCategory(ideaTab).map((idea) => <IdeaCard key={idea.id} idea={idea} />)}
+        </div>
+      </div>
 
       <Dialog open={showNew} onOpenChange={setShowNew}>
         <DialogContent className="sm:max-w-lg">

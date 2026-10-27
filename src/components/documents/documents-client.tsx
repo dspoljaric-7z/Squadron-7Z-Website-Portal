@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -23,9 +22,10 @@ import {
   DialogTitle as EditDialogTitle,
   DialogFooter as EditDialogFooter,
 } from "@/components/ui/dialog";
-import { FileText, Upload, Pencil, Trash2, Download, Lock } from "lucide-react";
+import { FileText, Upload, Pencil, Trash2, Download, Lock, Users, Shield } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import type { DocumentRow, Profile } from "@/types/database";
+import type { DocumentRow, Profile, UserRole } from "@/types/database";
 
 export function DocumentsClient({ profile, initialDocuments }: { profile: Profile; initialDocuments: DocumentRow[] }) {
   const [documents, setDocuments] = useState(initialDocuments);
@@ -33,6 +33,13 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
   const [editing, setEditing] = useState<DocumentRow | null>(null);
 
   const isOfficer = profile.role === "officer" || profile.role === "snco";
+
+  const handleDownload = async (filePath: string) => {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) { toast.error("Could not generate download link"); return; }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -103,16 +110,25 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
                 <div>
                   <p className="text-sm font-medium">{doc.name}</p>
                   <div className="flex items-center gap-2">
-                    {doc.officer_only && (
-                      <span className="flex items-center gap-1 text-xs text-[#B8860B]"><Lock className="h-3 w-3" /> Officer Only</span>
+                    {doc.officer_only && !doc.access_roles?.length && (
+                      <span className="flex items-center gap-1 text-xs text-[#B8860B]"><Lock className="h-3 w-3" /> Officers only</span>
+                    )}
+                    {doc.access_roles && doc.access_roles.includes("officer") && doc.access_roles.includes("snco") && !doc.access_roles.includes("nco") && (
+                      <span className="flex items-center gap-1 text-xs text-[#B8860B]"><Shield className="h-3 w-3" /> Officers &amp; SNCOs</span>
+                    )}
+                    {doc.access_roles && doc.access_roles.includes("nco") && (
+                      <span className="flex items-center gap-1 text-xs text-gray-500"><Shield className="h-3 w-3" /> Staff &amp; up</span>
+                    )}
+                    {!doc.officer_only && (!doc.access_roles || doc.access_roles.length === 0) && (
+                      <span className="flex items-center gap-1 text-xs text-green-600"><Users className="h-3 w-3" /> All members</span>
                     )}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-[#003087]">
+                <button onClick={() => handleDownload(doc.file_url)} className="text-gray-400 hover:text-[#003087]">
                   <Download className="h-4 w-4" />
-                </a>
+                </button>
                 {isOfficer && (
                   <>
                     <button onClick={() => setEditing(doc)} className="text-gray-400 hover:text-[#003087]">
@@ -141,10 +157,26 @@ export function DocumentsClient({ profile, initialDocuments }: { profile: Profil
   );
 }
 
+type Audience = "everyone" | "nco_plus" | "snco_plus" | "officer_only";
+
+function audienceToDb(audience: Audience): { officer_only: boolean; access_roles: UserRole[] | null } {
+  if (audience === "everyone")    return { officer_only: false, access_roles: null };
+  if (audience === "nco_plus")    return { officer_only: false, access_roles: ["officer", "snco", "nco"] as UserRole[] };
+  if (audience === "snco_plus")   return { officer_only: false, access_roles: ["officer", "snco"] as UserRole[] };
+  return { officer_only: true, access_roles: ["officer"] as UserRole[] };
+}
+
+function dbToAudience(doc: DocumentRow): Audience {
+  if (doc.access_roles?.includes("officer") && doc.access_roles?.includes("nco")) return "nco_plus";
+  if (doc.access_roles?.includes("officer") && !doc.access_roles?.includes("nco")) return "snco_plus";
+  if (doc.officer_only || doc.access_roles?.includes("officer")) return "officer_only";
+  return "everyone";
+}
+
 function UploadForm({ profile, onClose }: { profile: Profile; onClose: () => void }) {
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("General");
-  const [officerOnly, setOfficerOnly] = useState(false);
+  const [audience, setAudience] = useState<Audience>("everyone");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -162,12 +194,13 @@ function UploadForm({ profile, onClose }: { profile: Profile; onClose: () => voi
       setSaving(false);
       return;
     }
-    const { data } = supabase.storage.from("documents").getPublicUrl(path);
+    const { officer_only, access_roles } = audienceToDb(audience);
     const { error } = await supabase.from("documents").insert({
       name: name || file.name,
-      file_url: data.publicUrl,
+      file_url: path,
       folder: folder || "General",
-      officer_only: officerOnly,
+      officer_only,
+      access_roles,
       uploaded_by: profile.id,
     });
     setSaving(false);
@@ -195,9 +228,19 @@ function UploadForm({ profile, onClose }: { profile: Profile; onClose: () => voi
           <Label>Folder</Label>
           <Input value={folder} onChange={(e) => setFolder(e.target.value)} />
         </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="officer-only">Officer-only</Label>
-          <Switch id="officer-only" checked={officerOnly} onCheckedChange={setOfficerOnly} />
+        <div className="space-y-2">
+          <Label>Who can see this?</Label>
+          <Select value={audience} onValueChange={(v) => setAudience(v as Audience)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="everyone">All members (cadets and up)</SelectItem>
+              <SelectItem value="nco_plus">NCOs, SNCOs &amp; Officers only</SelectItem>
+              <SelectItem value="snco_plus">SNCOs &amp; Officers only</SelectItem>
+              <SelectItem value="officer_only">Officers only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <DialogFooter>
@@ -213,11 +256,12 @@ function UploadForm({ profile, onClose }: { profile: Profile; onClose: () => voi
 function EditDocumentForm({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
   const [name, setName] = useState(doc.name);
   const [folder, setFolder] = useState(doc.folder);
-  const [officerOnly, setOfficerOnly] = useState(doc.officer_only);
+  const [audience, setAudience] = useState<Audience>(dbToAudience(doc));
 
   const save = async () => {
     const supabase = createClient();
-    const { error } = await supabase.from("documents").update({ name, folder, officer_only: officerOnly }).eq("id", doc.id);
+    const { officer_only, access_roles } = audienceToDb(audience);
+    const { error } = await supabase.from("documents").update({ name, folder, officer_only, access_roles }).eq("id", doc.id);
     if (error) {
       toast.error("Failed to update");
       return;
@@ -238,9 +282,19 @@ function EditDocumentForm({ doc, onClose }: { doc: DocumentRow; onClose: () => v
           <Label>Folder</Label>
           <Input value={folder} onChange={(e) => setFolder(e.target.value)} />
         </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="edit-officer-only">Officer-only</Label>
-          <Switch id="edit-officer-only" checked={officerOnly} onCheckedChange={setOfficerOnly} />
+        <div className="space-y-2">
+          <Label>Who can see this?</Label>
+          <Select value={audience} onValueChange={(v) => setAudience(v as Audience)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="everyone">All members (cadets and up)</SelectItem>
+              <SelectItem value="nco_plus">NCOs, SNCOs &amp; Officers only</SelectItem>
+              <SelectItem value="snco_plus">SNCOs &amp; Officers only</SelectItem>
+              <SelectItem value="officer_only">Officers only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <EditDialogFooter>

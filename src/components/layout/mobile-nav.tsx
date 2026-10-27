@@ -31,6 +31,14 @@ import {
   Settings,
   BookOpen,
   Trophy,
+  Shield,
+  FileCheck,
+  History,
+  CalendarOff,
+  GanttChart,
+  Map,
+  ScrollText,
+  DoorOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -65,6 +73,15 @@ const ICONS: Record<NavIconName, React.ElementType> = {
   Settings,
   BookOpen,
   Trophy,
+  Shield,
+  ClipboardList2: ClipboardList,
+  FileCheck,
+  History,
+  CalendarOff,
+  GanttChart,
+  Map,
+  ScrollText,
+  DoorOpen,
 };
 
 export function MobileNav({

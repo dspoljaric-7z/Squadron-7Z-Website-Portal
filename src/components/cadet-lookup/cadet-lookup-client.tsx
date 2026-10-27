@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { Search, ChevronRight } from "lucide-react";
 import { initials, lastFirst, byLastName, roleLabel, computedTrainingPhase, allBillets } from "@/lib/format";
-import { DRILL_ATTENDANCE_COLORS, QUAL_STATUS_LABELS, QUAL_STATUS_COLORS, QUAL_TYPES } from "@/lib/constants";
+import { DRILL_ATTENDANCE_COLORS, QUAL_STATUS_LABELS, QUAL_STATUS_COLORS } from "@/lib/constants";
 import type { Profile, DrillAttendance, Qualification, QualStatus, DrillAttendanceStatus } from "@/types/database";
 
 type CadetRow = Pick<Profile, "id" | "full_name" | "rank" | "billet" | "billet_2" | "billet_3" | "role" | "division_id" | "join_date" | "date_of_rank" | "active" | "approved" | "email">;
@@ -20,11 +19,13 @@ type DetailData = {
   qualifications: Qualification[];
 };
 
-export function CadetLookupClient({ cadets }: { cadets: CadetRow[]; profile: Profile }) {
+export function CadetLookupClient({ cadets, qualTypes }: { cadets: CadetRow[]; qualTypes: string[] }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<CadetRow | null>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailTab, setDetailTab] = useState<"attendance" | "quals">("attendance");
+  const pendingDetailId = useRef<string | null>(null);
 
   const filtered = useMemo(() => {
     const sorted = [...cadets].sort(byLastName);
@@ -39,6 +40,7 @@ export function CadetLookupClient({ cadets }: { cadets: CadetRow[]; profile: Pro
     setSelected(cadet);
     setDetail(null);
     setLoadingDetail(true);
+    pendingDetailId.current = cadet.id;
     const supabase = createClient();
     const [attRes, qualRes] = await Promise.all([
       supabase
@@ -49,6 +51,7 @@ export function CadetLookupClient({ cadets }: { cadets: CadetRow[]; profile: Pro
         .limit(20),
       supabase.from("qualifications").select("*").eq("cadet_id", cadet.id),
     ]);
+    if (pendingDetailId.current !== cadet.id) return;
     setDetail({
       drillAttendance: (attRes.data ?? []) as never,
       qualifications: qualRes.data ?? [],
@@ -159,13 +162,29 @@ export function CadetLookupClient({ cadets }: { cadets: CadetRow[]; profile: Pro
             )}
 
             {detail && (
-              <Tabs defaultValue="attendance">
-                <TabsList>
-                  <TabsTrigger value="attendance">Drill Attendance ({detail.drillAttendance.length})</TabsTrigger>
-                  <TabsTrigger value="quals">Qualifications</TabsTrigger>
-                </TabsList>
+              <>
+                <div className="border-b border-gray-200 mb-3">
+                  <nav className="-mb-px flex">
+                    {([
+                      { value: "attendance", label: `Drill Attendance (${detail.drillAttendance.length})` },
+                      { value: "quals",      label: "Qualifications" },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setDetailTab(value)}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          detailTab === value
+                            ? "border-[#003087] text-[#003087]"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
 
-                <TabsContent value="attendance" className="mt-3 space-y-1">
+                {detailTab === "attendance" && <div className="mt-3 space-y-1">
                   {detail.drillAttendance.length === 0 && (
                     <p className="text-center py-6 text-sm text-gray-400">No drill attendance records.</p>
                   )}
@@ -176,29 +195,27 @@ export function CadetLookupClient({ cadets }: { cadets: CadetRow[]; profile: Pro
                         {a.drill_sessions?.location ? ` · ${a.drill_sessions.location}` : ""}
                       </span>
                       <Badge className={DRILL_ATTENDANCE_COLORS[a.status as DrillAttendanceStatus]} variant="outline">
-                        {a.status}
+                        {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
                       </Badge>
                     </div>
                   ))}
-                </TabsContent>
+                </div>}
 
-                <TabsContent value="quals" className="mt-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {QUAL_TYPES.map((qt) => {
-                      const q = detail.qualifications.find((x) => x.qual_type === qt);
-                      const status: QualStatus = q?.status ?? "not_started";
-                      return (
-                        <div key={qt} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
-                          <span className="text-gray-700">{qt}</span>
-                          <Badge className={QUAL_STATUS_COLORS[status]} variant="outline">
-                            {QUAL_STATUS_LABELS[status]}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </TabsContent>
-              </Tabs>
+                {detailTab === "quals" && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {qualTypes.map((qt) => {
+                    const q = detail.qualifications.find((x) => x.qual_type === qt);
+                    const status: QualStatus = q?.status ?? "not_started";
+                    return (
+                      <div key={qt} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
+                        <span className="text-gray-700">{qt}</span>
+                        <Badge className={QUAL_STATUS_COLORS[status]} variant="outline">
+                          {QUAL_STATUS_LABELS[status]}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>}
+              </>
             )}
           </div>
         )}

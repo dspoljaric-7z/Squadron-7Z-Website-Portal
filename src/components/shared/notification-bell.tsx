@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, AlertTriangle, Shirt, TrendingUp, Info, Check, X } from "lucide-react";
+import { Bell, AlertTriangle, Shirt, TrendingUp, Info, Check, X, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDistanceToNow } from "date-fns";
@@ -12,6 +12,7 @@ const TYPE_CONFIG: Record<NotificationType, { icon: React.ElementType; color: st
   inspection_fail:  { icon: Shirt,         color: "text-amber-600",  bg: "bg-amber-50" },
   inspection_pass:  { icon: Check,         color: "text-green-600",  bg: "bg-green-50" },
   pip_opened:       { icon: TrendingUp,    color: "text-orange-600", bg: "bg-orange-50" },
+  rank_advance:     { icon: Star,          color: "text-yellow-600", bg: "bg-yellow-50" },
   general:          { icon: Info,          color: "text-blue-600",   bg: "bg-blue-50" },
 };
 
@@ -55,7 +56,7 @@ export function NotificationBell({ profileId }: { profileId: string }) {
 
   const handleOpen = (isOpen: boolean) => {
     setOpen(isOpen);
-    if (isOpen && unread > 0) markAllRead();
+    // Dot persists until user explicitly dismisses or marks all read
   };
 
   const dismiss = async (id: string) => {

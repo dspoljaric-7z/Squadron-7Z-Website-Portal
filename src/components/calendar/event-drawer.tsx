@@ -24,7 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { EVENT_TYPE_LABELS } from "@/lib/constants";
 import type { Event, EventType, RsvpStatus } from "@/types/database";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addWeeks, addMonths, parseISO } from "date-fns";
 
 function toLocalInput(dt: string | null): string {
   if (!dt) return "";
@@ -58,6 +58,8 @@ export function EventDrawer({
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
   const [eventType, setEventType] = useState<EventType>("drill");
+  const [recurrence, setRecurrence] = useState<"none" | "weekly" | "monthly">("none");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
   const [dirty, setDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -94,6 +96,8 @@ export function EventDrawer({
       setEndTime("");
       setLocation("");
       setEventType("drill");
+      setRecurrence("none");
+      setRecurrenceEndDate("");
       setMyRsvp(null);
       setRsvpCounts({});
     }
@@ -147,14 +151,34 @@ export function EventDrawer({
     } else {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from("profiles").select("id").eq("user_id", user!.id).single();
-      ({ error } = await supabase.from("events").insert({ ...payload, created_by: profile?.id }));
-      if (!error && eventType === "drill") {
-        const drillDate = new Date(startTime).toISOString().split("T")[0];
-        await supabase.from("drill_sessions").insert({
-          date: drillDate,
-          location: location || null,
-          recorded_by: profile?.id,
-        });
+
+      if (recurrence === "none") {
+        ({ error } = await supabase.from("events").insert({ ...payload, created_by: profile?.id }));
+        if (!error && eventType === "drill") {
+          const drillDate = new Date(startTime).toISOString().split("T")[0];
+          await supabase.from("drill_sessions").insert({ date: drillDate, location: location || null, recorded_by: profile?.id });
+        }
+      } else {
+        // Generate all recurring instances up to recurrenceEndDate (or 52 weeks / 12 months max)
+        const endLimit = recurrenceEndDate ? parseISO(recurrenceEndDate) : (recurrence === "weekly" ? addWeeks(new Date(startTime), 52) : addMonths(new Date(startTime), 12));
+        const instances: typeof payload[] = [];
+        let cursor = new Date(startTime);
+        const durationMs = endTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
+        while (cursor <= endLimit && instances.length < 52) {
+          const instanceEnd = durationMs ? new Date(cursor.getTime() + durationMs).toISOString() : null;
+          instances.push({ ...payload, start_time: cursor.toISOString(), end_time: instanceEnd });
+          cursor = recurrence === "weekly" ? addWeeks(cursor, 1) : addMonths(cursor, 1);
+        }
+        const rows = instances.map((inst) => ({ ...inst, created_by: profile?.id }));
+        ({ error } = await supabase.from("events").insert(rows as never));
+        if (!error && eventType === "drill") {
+          const drillDates = instances.map((inst) => ({
+            date: inst.start_time.split("T")[0],
+            location: location || null,
+            recorded_by: profile?.id,
+          }));
+          await supabase.from("drill_sessions").insert(drillDates as never);
+        }
       }
     }
     setSaving(false);
@@ -224,33 +248,68 @@ export function EventDrawer({
               </Select>
             </div>
 
-            {/* RSVP */}
-            {event && profileId && (
-              <div className="space-y-2 rounded-lg border bg-gray-50 p-3">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your RSVP</Label>
-                <div className="flex gap-2">
-                  {([
-                    { status: "attending" as RsvpStatus, label: "Going", cls: "bg-green-500 hover:bg-green-600" },
-                    { status: "maybe" as RsvpStatus, label: "Maybe", cls: "bg-amber-500 hover:bg-amber-600" },
-                    { status: "not_attending" as RsvpStatus, label: "Can't Go", cls: "bg-red-500 hover:bg-red-600" },
-                  ] as const).map(({ status, label, cls }) => (
-                    <button
-                      key={status}
-                      disabled={rsvpSaving}
-                      onClick={() => submitRsvp(status)}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold text-white transition-all ${myRsvp === status ? cls + " ring-2 ring-offset-1 ring-current opacity-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+            {/* Recurrence — new events only */}
+            {!event && !readOnly && (
+              <div className="space-y-3 rounded-lg border bg-gray-50 p-3">
+                <div className="space-y-2">
+                  <Label>Repeat</Label>
+                  <Select value={recurrence} onValueChange={(v) => { setRecurrence(v as "none" | "weekly" | "monthly"); setDirty(true); }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Does not repeat</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                {canEdit && (
-                  <p className="text-[11px] text-gray-400 text-center">
-                    Going: {rsvpCounts["attending"] ?? 0} · Maybe: {rsvpCounts["maybe"] ?? 0} · Can&apos;t Go: {rsvpCounts["not_attending"] ?? 0}
-                  </p>
+                {recurrence !== "none" && (
+                  <div className="space-y-2">
+                    <Label>Repeat until</Label>
+                    <Input
+                      type="date"
+                      value={recurrenceEndDate}
+                      onChange={(e) => { setRecurrenceEndDate(e.target.value); setDirty(true); }}
+                    />
+                    <p className="text-[11px] text-gray-400">Leave blank to generate {recurrence === "weekly" ? "52 weeks" : "12 months"} of events.</p>
+                  </div>
                 )}
               </div>
             )}
+
+            {/* RSVP */}
+            {event && profileId && (() => {
+              const isPast = event.start_time ? new Date(event.start_time) < new Date() : false;
+              return (
+                <div className="space-y-2 rounded-lg border bg-gray-50 p-3">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your RSVP</Label>
+                  {isPast ? (
+                    <p className="text-xs text-gray-400 italic">This event has already passed — RSVPs are closed.</p>
+                  ) : (
+                    <div className="flex gap-2">
+                      {([
+                        { status: "attending" as RsvpStatus, label: "Going", cls: "bg-green-500 hover:bg-green-600" },
+                        { status: "maybe" as RsvpStatus, label: "Maybe", cls: "bg-amber-500 hover:bg-amber-600" },
+                        { status: "not_attending" as RsvpStatus, label: "Can't Go", cls: "bg-red-500 hover:bg-red-600" },
+                      ] as const).map(({ status, label, cls }) => (
+                        <button
+                          key={status}
+                          disabled={rsvpSaving}
+                          onClick={() => submitRsvp(status)}
+                          className={`flex-1 rounded-lg py-1.5 text-xs font-semibold text-white transition-all ${myRsvp === status ? cls + " ring-2 ring-offset-1 ring-current opacity-100" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {canEdit && (
+                    <p className="text-[11px] text-gray-400 text-center">
+                      Going: {rsvpCounts["attending"] ?? 0} · Maybe: {rsvpCounts["maybe"] ?? 0} · Can&apos;t Go: {rsvpCounts["not_attending"] ?? 0}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           {!readOnly && (
             <SheetFooter className="flex-row justify-between gap-2">

@@ -15,14 +15,60 @@ export type BoardResultRow = {
 export type AttendanceStatus = "present" | "absent" | "excused";
 export type DrillAttendanceStatus = "present" | "absent" | "excused" | "late";
 export type AnnouncementPriority = "general" | "important" | "urgent";
-export type EventType = "drill" | "training" | "ceremony" | "community_service" | "other";
-export type PodCategory = "formation" | "training" | "meal" | "admin" | "general";
+export type AnnouncementAudience = "all" | "officers_sncOs" | "ncos_plus" | "cadets_only";
+export type EventType = "drill" | "training" | "ceremony" | "community_service" | "outreach" | "other";
+export type PodCategory = "formation" | "pt" | "training" | "meal" | "admin" | "general" | "side_event";
 export type NominationStage = "nominated" | "applied" | "interviewed" | "approved_probation" | "confirmed" | "not_selected";
 export type CorrectionStatus = "open" | "resolved" | "cleared";
-export type PipStatus = "open" | "closed" | "failed";
+export type PipStatus = "open" | "closed" | "failed" | "pending_ack";
 export type IssueCategory = "gear" | "safety" | "parent_guardian" | "peer_conflict" | "general";
 export type IssueStatus = "open" | "monitoring" | "resolved";
 export type ProspectStage = "prospect" | "contacted" | "interested" | "applied" | "enrolled" | "inactive";
+export type ProspectStatus = "prospect" | "contacted" | "visited" | "applied" | "enrolled" | "inactive" | "not_interested";
+export type ProspectNoteType = "note" | "call" | "email" | "visit" | "meeting" | "other";
+
+export type Prospect = {
+  id: string;
+  name: string;
+  unit: string | null;
+  school: string | null;
+  grade: string | null;
+  email: string | null;
+  phone: string | null;
+  guardian_name: string | null;
+  guardian_contact: string | null;
+  status: ProspectStatus;
+  notes: string | null;
+  source: string | null;
+  first_visit_date: string | null;
+  application_date: string | null;
+  enrollment_date: string | null;
+  created_by: string | null;
+  converted_to_profile_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProspectNote = {
+  id: string;
+  prospect_id: string;
+  body: string;
+  type: ProspectNoteType;
+  created_by: string | null;
+  created_at: string;
+  author?: { full_name: string; rank: string | null } | null;
+};
+
+export type ProspectChecklistItem = {
+  id: string;
+  prospect_id: string;
+  item: string;
+  sort_order: number;
+  completed: boolean;
+  completed_by: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
 export type IdeaCategory = "drill" | "stem" | "service";
 export type QualStatus = "not_started" | "in_progress" | "completed";
 export type VisitorStatus = "prospect" | "enrolled" | "inactive" | "not_interested";
@@ -39,6 +85,17 @@ export type Profile = {
   date_of_rank: string | null;
   is_command: boolean;
   is_maa: boolean;
+  officer_billet: string | null;
+  is_yeoman: boolean;
+  is_ops: boolean;
+  is_alpo: boolean;
+  is_lcpo: boolean;
+  can_manage_recruiting: boolean;
+  can_manage_advancement: boolean;
+  can_manage_drills: boolean;
+  can_manage_discipline: boolean;
+  can_manage_ideas: boolean;
+  can_manage_pod: boolean;
   bio: string | null;
   preferred_name: string | null;
   contact_phone: string | null;
@@ -70,6 +127,8 @@ export type Event = {
   end_time: string | null;
   location: string | null;
   event_type: EventType;
+  recurrence: "none" | "weekly" | "monthly";
+  recurrence_end_date: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -116,6 +175,7 @@ export type DrillAttendance = {
   session_id: string;
   cadet_id: string;
   status: DrillAttendanceStatus;
+  arrival_time: string | null;
   notes: string | null;
   recorded_by: string | null;
   recorded_at: string;
@@ -129,6 +189,7 @@ export type DrillVisitor = {
   guardian_contact: string | null;
   status: VisitorStatus;
   notes: string | null;
+  pre_logged: boolean;
   created_at: string;
 }
 
@@ -140,6 +201,8 @@ export type Qualification = {
   completed_date: string | null;
   notes: string | null;
   recorded_by: string | null;
+  expires_at: string | null;
+  never_expires: boolean;
   updated_at: string;
 }
 
@@ -186,6 +249,17 @@ export type CorrectiveAction = {
   created_at: string;
 }
 
+export type PipTask = {
+  id: string;
+  pip_id: string;
+  description: string;
+  due_date: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
 export type Pip = {
   id: string;
   cadet_id: string;
@@ -201,8 +275,15 @@ export type Pip = {
   outcome_notes: string | null;
   opened_at: string;
   closed_at: string | null;
+  closed_by: string | null;
   created_at: string;
   updated_at: string;
+  // Extended fields
+  area_of_concern: string | null;
+  specific_requirements: string | null;
+  review_date: string | null;
+  support_resources: string | null;
+  meeting_frequency: string | null;
 }
 
 export type UniformInspectionSession = {
@@ -221,6 +302,37 @@ export type UniformInspectionResult = {
   passed: boolean;
   deficiencies: string | null;
   notes: string | null;
+  scores: Record<string, number> | null;
+  created_at: string;
+}
+
+export type CadetPaperwork = {
+  id: string;
+  cadet_id: string;
+  doc_type_id: string;
+  expiry_date: string | null;
+  submitted_date: string | null;
+  notes: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PaperworkDocType = {
+  id: string;
+  label: string;
+  short_label: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+}
+
+export type InspectionItemDef = {
+  id: string;
+  item_key: string;
+  label: string;
+  sort_order: number;
+  active: boolean;
   created_at: string;
 }
 
@@ -283,7 +395,9 @@ export type Announcement = {
   title: string;
   body: string;
   priority: AnnouncementPriority;
+  audience: AnnouncementAudience;
   image_url: string | null;
+  expires_at: string | null;
   posted_by: string | null;
   created_at: string;
   updated_at: string;
@@ -349,12 +463,26 @@ export type InviteCode = {
   created_at: string;
 }
 
+export type ContactInquiry = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  subject: string;
+  message: string;
+  source: string | null;
+  reviewed: boolean;
+  created_at: string;
+};
+
 export type SiteSettings = {
   id: number;
   unit_name: string;
   motto: string;
   logo_url: string | null;
   auto_approve_registrations: boolean;
+  co_intent: string | null;
+  public_site_enabled: boolean;
 }
 
 export type PodItem = {
@@ -365,19 +493,37 @@ export type PodItem = {
   category: PodCategory;
   responsible_id: string | null;
   responsible_name: string | null;
+  // Staff-only PT planning fields (not shown to cadets in view mode)
+  pt_type?: string;
+  pt_notes?: string;
 }
+
+export type PodStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
 
 export type PlanOfDay = {
   id: string;
   date: string;
+  status: PodStatus;
   uniform_of_day: string | null;
   watch_bill: string | null;
+  training_objective: string | null;
+  officer_in_charge_id: string | null;
+  officer_in_charge_name: string | null;
+  special_events: string | null;
+  safety_brief: string | null;
   items: PodItem[];
   notes: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  approval_notes: string | null;
   created_by: string | null;
   updated_by: string | null;
   updated_at: string;
   created_at: string;
+  amended_at: string | null;
 }
 
 export type PodTemplate = {
@@ -387,6 +533,11 @@ export type PodTemplate = {
   items: PodItem[];
   uniform_of_day: string | null;
   watch_bill: string | null;
+  training_objective: string | null;
+  officer_in_charge_id: string | null;
+  officer_in_charge_name: string | null;
+  special_events: string | null;
+  safety_brief: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -396,15 +547,40 @@ export type Billet = {
   name: string;
   description: string | null;
   duties: string | null;
+  prerequisites: string | null;
+  handoff_notes: string | null;
   assigned_to: string | null;
   assigned_by: string | null;
   assigned_at: string | null;
   sort_order: number;
   active: boolean;
   created_at: string;
+  parent_billet_id: string | null;
+  org_section: string | null;
+  is_advisory: boolean;
 }
 
-export type NotificationType = "correction" | "inspection_fail" | "inspection_pass" | "pip_opened" | "general";
+export type BilletInterest = {
+  id: string;
+  cadet_id: string;
+  billet_id: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export type CadetChecklist = {
+  id: string;
+  cadet_id: string;
+  type: "onboarding" | "separation";
+  step: string;
+  completed: boolean;
+  completed_at: string | null;
+  completed_by: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export type NotificationType = "correction" | "inspection_fail" | "inspection_pass" | "pip_opened" | "rank_advance" | "general";
 
 export type Notification = {
   id: string;
@@ -443,6 +619,34 @@ export type WatchBill = {
   updated_at: string;
 }
 
+export type SavedLink = {
+  id: string;
+  title: string;
+  url: string;
+  icon: string | null;
+  description: string | null;
+  visible_to: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type EarlyDepartureStatus = "pending" | "approved" | "denied";
+
+export type EarlyDepartureRequest = {
+  id: string;
+  cadet_id: string;
+  session_id: string;
+  reason: string | null;
+  departure_time: string | null;
+  status: EarlyDepartureStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reviewer_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -458,9 +662,11 @@ export interface Database {
       corrections: { Row: Correction; Insert: Partial<Correction>; Update: Partial<Correction>; Relationships: [] };
       corrective_actions: { Row: CorrectiveAction; Insert: Partial<CorrectiveAction>; Update: Partial<CorrectiveAction>; Relationships: [] };
       pips: { Row: Pip; Insert: Partial<Pip>; Update: Partial<Pip>; Relationships: [] };
+      pip_tasks: { Row: PipTask; Insert: Partial<PipTask>; Update: Partial<PipTask>; Relationships: [] };
       pip_corrections: { Row: { pip_id: string; correction_id: string }; Insert: { pip_id: string; correction_id: string }; Update: { pip_id?: string; correction_id?: string }; Relationships: [] };
       uniform_inspection_sessions: { Row: UniformInspectionSession; Insert: Partial<UniformInspectionSession>; Update: Partial<UniformInspectionSession>; Relationships: [] };
       uniform_inspection_results: { Row: UniformInspectionResult; Insert: Partial<UniformInspectionResult>; Update: Partial<UniformInspectionResult>; Relationships: [] };
+      cadet_paperwork: { Row: CadetPaperwork; Insert: Partial<CadetPaperwork>; Update: Partial<CadetPaperwork>; Relationships: [] };
       other_issues: { Row: OtherIssue; Insert: Partial<OtherIssue>; Update: Partial<OtherIssue>; Relationships: [] };
       recruiting_prospects: { Row: RecruitingProspect; Insert: Partial<RecruitingProspect>; Update: Partial<RecruitingProspect>; Relationships: [] };
       activity_ideas: { Row: ActivityIdea; Insert: Partial<ActivityIdea>; Update: Partial<ActivityIdea>; Relationships: [] };
@@ -481,6 +687,8 @@ export interface Database {
       announcement_reads: { Row: AnnouncementRead; Insert: Partial<AnnouncementRead>; Update: Partial<AnnouncementRead>; Relationships: [] };
       watch_bills: { Row: WatchBill; Insert: Partial<WatchBill>; Update: Partial<WatchBill>; Relationships: [] };
       notifications: { Row: Notification; Insert: Partial<Notification>; Update: Partial<Notification>; Relationships: [] };
+      saved_links: { Row: SavedLink; Insert: Partial<SavedLink>; Update: Partial<SavedLink>; Relationships: [] };
+      early_departure_requests: { Row: EarlyDepartureRequest; Insert: Partial<EarlyDepartureRequest>; Update: Partial<EarlyDepartureRequest>; Relationships: [] };
     };
     Views: Record<string, never>;
     Functions: {

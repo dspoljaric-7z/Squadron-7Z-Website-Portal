@@ -10,13 +10,34 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangle, Plus, CheckCircle, FileText, ShieldAlert, ClipboardList, Check } from "lucide-react";
+import { AlertTriangle, Plus, CheckCircle, FileText, ShieldAlert, ClipboardList, Check, ListChecks, Calendar, Users, BookOpen, Clock, Trash2 } from "lucide-react";
 import { format, addYears } from "date-fns";
 import { toast } from "sonner";
 import { CORRECTION_TIER_LABELS, CORRECTION_TIER_COLORS } from "@/lib/constants";
-import type { Profile, Correction, CorrectiveAction, Pip, CorrectionStatus } from "@/types/database";
+import type { Profile, Correction, CorrectiveAction, Pip, PipTask, CorrectionStatus } from "@/types/database";
 import { initials } from "@/lib/format";
+import { createPip as createPipAction, updatePipStatus, deletePip } from "@/app/(app)/discipline/actions";
+import { SearchableSelect } from "@/components/shared/searchable-select";
+
+const AREA_OF_CONCERN_OPTIONS = [
+  { value: "attendance", label: "Attendance / Punctuality" },
+  { value: "uniform", label: "Uniform / Appearance" },
+  { value: "conduct", label: "Conduct / Behavior" },
+  { value: "performance", label: "Performance / Participation" },
+  { value: "academic", label: "Academic Performance" },
+  { value: "physical_fitness", label: "Physical Fitness" },
+  { value: "attitude", label: "Attitude / Teamwork" },
+  { value: "multiple", label: "Multiple Areas" },
+  { value: "other", label: "Other" },
+];
+
+const MEETING_FREQUENCY_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "bi_weekly", label: "Every Two Weeks" },
+  { value: "monthly", label: "Monthly" },
+  { value: "each_drill", label: "Each Drill" },
+  { value: "as_needed", label: "As Needed" },
+];
 
 type CorrectionRow = Correction & {
   cadet: { id: string; full_name: string; rank: string | null } | null;
@@ -27,7 +48,7 @@ type CorrectionRow = Correction & {
 
 type PipRow = Pip & {
   cadet: { id: string; full_name: string; rank: string | null } | null;
-  supervisor: { full_name: string } | null;
+  supervisor: { full_name: string; rank?: string | null } | null;
 };
 
 // Escalation: 3+ Tier II in rolling 12mo → PIP required; 3+ Tier III → EO Inquiry; any Tier IV → EO Inquiry
@@ -50,11 +71,13 @@ export function CorrectionsClient({
   initialPips,
   cadets,
   profile,
+  staffProfiles = [],
 }: {
   initialCorrections: CorrectionRow[];
   initialPips: PipRow[];
   cadets: { id: string; full_name: string; rank: string | null }[];
   profile: Profile;
+  staffProfiles?: { id: string; full_name: string; rank: string | null }[];
 }) {
   const [corrections, setCorrections] = useState(initialCorrections);
   const [pips, setPips] = useState(initialPips);
@@ -63,9 +86,21 @@ export function CorrectionsClient({
   const [saving, setSaving] = useState(false);
   const [selectedCadet, setSelectedCadet] = useState<string | null>(null);
   const [searchQ, setSearchQ] = useState("");
+  const [corrTab, setCorrTab] = useState<"corrections" | "pips">("corrections");
 
   const [corrForm, setCorrForm] = useState<{ cadet_id: string; tier: string; description: string }>({ cadet_id: "", tier: "1", description: "" });
-  const [pipForm, setPipForm] = useState({ cadet_id: "", root_cause: "", timeline: "", goals: "" });
+  const [pipForm, setPipForm] = useState({
+    cadet_id: "",
+    area_of_concern: "",
+    root_cause: "",
+    specific_requirements: "",
+    review_date: "",
+    timeline: "",
+    goals: "",
+    support_resources: "",
+    meeting_frequency: "",
+    supervisor_id: "",
+  });
 
   const escalationFlags = useMemo(() => {
     if (!corrForm.cadet_id) return [];
@@ -116,6 +151,14 @@ export function CorrectionsClient({
     if (tier === 3 || tier === 4) {
       toast.warning(`Tier ${tier} correction — Duty Officer approval required before this is valid.`);
     }
+
+    // Notify the cadet
+    await supabase.from("notifications").insert({
+      profile_id: corrForm.cadet_id,
+      type: "correction",
+      title: `Tier ${tier} Correction`,
+      body: corrForm.description.slice(0, 200),
+    });
   };
 
   const approveCorrection = async (id: string) => {
@@ -134,28 +177,67 @@ export function CorrectionsClient({
     toast.success("Correction resolved");
   };
 
-  const createPip = async () => {
-    if (!pipForm.cadet_id || !pipForm.root_cause) return;
+  const createPipHandler = async () => {
+    if (!pipForm.cadet_id || !pipForm.root_cause || !pipForm.area_of_concern) return;
     setSaving(true);
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("pips")
-      .insert({ ...pipForm, co_id: profile.id, status: "open" })
-      .select("*, cadet:profiles!pips_cadet_id_fkey(id, full_name, rank), supervisor:profiles!pips_supervisor_id_fkey(full_name)")
-      .single();
+    const result = await createPipAction(pipForm);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    setPips((prev) => [data as unknown as PipRow, ...prev]);
+    if (result.error) { toast.error(result.error); return; }
+
+    // Optimistic update — fetch minimal pip data for display
+    const cadet = cadets.find((c) => c.id === pipForm.cadet_id);
+    const supervisor = staffProfiles.find((s) => s.id === pipForm.supervisor_id);
+    const newPip: PipRow = {
+      id: result.id!,
+      cadet_id: pipForm.cadet_id,
+      root_cause: pipForm.root_cause,
+      timeline: pipForm.timeline || null,
+      goals: pipForm.goals || null,
+      supervisor_id: pipForm.supervisor_id || null,
+      co_id: profile.id,
+      status: "open",
+      outcome_notes: null,
+      opened_at: new Date().toISOString(),
+      closed_at: null,
+      closed_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      cadet_signature_date: null,
+      supervisor_signature_date: null,
+      co_signature_date: null,
+      area_of_concern: pipForm.area_of_concern,
+      specific_requirements: pipForm.specific_requirements || null,
+      review_date: pipForm.review_date || null,
+      support_resources: pipForm.support_resources || null,
+      meeting_frequency: pipForm.meeting_frequency || null,
+      cadet: cadet ? { id: cadet.id, full_name: cadet.full_name, rank: cadet.rank } : null,
+      supervisor: supervisor ? { full_name: supervisor.full_name } : null,
+    };
+    setPips((prev) => [newPip, ...prev]);
     setShowNewPip(false);
-    setPipForm({ cadet_id: "", root_cause: "", timeline: "", goals: "" });
-    toast.success("PIP created");
+    setPipForm({ cadet_id: "", area_of_concern: "", root_cause: "", specific_requirements: "", review_date: "", timeline: "", goals: "", support_resources: "", meeting_frequency: "", supervisor_id: "" });
+    toast.success("PIP created — cadet and command staff notified");
   };
 
-  const closePip = async (id: string, status: "closed" | "failed", notes: string) => {
-    const supabase = createClient();
-    await supabase.from("pips").update({ status, outcome_notes: notes, closed_at: new Date().toISOString() }).eq("id", id);
-    setPips((prev) => prev.map((p) => p.id === id ? { ...p, status } : p));
-    toast.success(`PIP ${status}`);
+  const closePip = async (id: string, notes: string) => {
+    const result = await updatePipStatus(id, "pending_ack", notes);
+    if (result.error) { toast.error(result.error); return; }
+    setPips((prev) => prev.map((p) => p.id === id ? { ...p, status: "pending_ack", outcome_notes: notes } : p));
+    toast.success("PIP closed — awaiting cadet acknowledgment");
+  };
+
+  const failPip = async (id: string, notes: string) => {
+    const result = await updatePipStatus(id, "failed", notes);
+    if (result.error) { toast.error(result.error); return; }
+    setPips((prev) => prev.map((p) => p.id === id ? { ...p, status: "failed", outcome_notes: notes } : p));
+    toast.success("PIP marked as failed");
+  };
+
+  const handleDeletePip = async (id: string) => {
+    const result = await deletePip(id);
+    if (result.error) { toast.error(result.error); return; }
+    setPips((prev) => prev.filter((p) => p.id !== id));
+    toast.success("PIP deleted");
   };
 
   const openCorrections = corrections.filter((c) => c.status === "open");
@@ -212,17 +294,36 @@ export function CorrectionsClient({
         </Card>
       )}
 
-      <Tabs defaultValue="corrections">
-        <TabsList>
-          <TabsTrigger value="corrections">Corrections ({corrections.length})</TabsTrigger>
-          <TabsTrigger value="pips">PIPs ({pips.length})</TabsTrigger>
-        </TabsList>
+      <div>
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex">
+            {(["corrections", "pips"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setCorrTab(t)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  corrTab === t
+                    ? "border-[#003087] text-[#003087]"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {t === "corrections" ? `Corrections (${corrections.length})` : `PIPs (${pips.length})`}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-        <TabsContent value="corrections" className="mt-3 space-y-3">
+        {corrTab === "corrections" && <div className="mt-3 space-y-3">
           <div className="flex gap-3">
             <Input placeholder="Search by name…" value={searchQ} onChange={(e) => setSearchQ(e.target.value)} className="h-9 max-w-xs" />
             <Select value={selectedCadet ?? "_all"} onValueChange={(v) => setSelectedCadet(v === "_all" ? null : v)}>
-              <SelectTrigger className="h-9 w-48"><SelectValue placeholder="All cadets" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-48">
+                <SelectValue placeholder="All cadets">
+                  {selectedCadet
+                    ? (() => { const c = cadets.find((x) => x.id === selectedCadet); return c ? `${c.rank ? c.rank + " " : ""}${c.full_name}` : null; })()
+                    : "All cadets"}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_all">All cadets</SelectItem>
                 {cadets.map((c) => <SelectItem key={c.id} value={c.id}>{c.rank ? `${c.rank} ` : ""}{c.full_name}</SelectItem>)}
@@ -233,14 +334,19 @@ export function CorrectionsClient({
           {filteredCorrections.filter((c) => !searchQ || c.cadet?.full_name.toLowerCase().includes(searchQ.toLowerCase())).map((c) => (
             <CorrectionCard key={c.id} correction={c} onApprove={approveCorrection} onResolve={resolveCorrection} />
           ))}
-        </TabsContent>
+        </div>}
 
-        <TabsContent value="pips" className="mt-3 space-y-3">
+        {corrTab === "pips" && <div className="mt-3 space-y-3">
+          {pips.length === 0 && (
+            <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+              No PIPs on record. Use &ldquo;New PIP&rdquo; to open one for a cadet.
+            </div>
+          )}
           {pips.map((p) => (
-            <PipCard key={p.id} pip={p} onClose={closePip} />
+            <PipCard key={p.id} pip={p} onClose={closePip} onFail={failPip} onDelete={handleDeletePip} />
           ))}
-        </TabsContent>
-      </Tabs>
+        </div>}
+      </div>
 
       {/* New Correction Dialog */}
       <Dialog open={showNewCorrection} onOpenChange={setShowNewCorrection}>
@@ -250,12 +356,12 @@ export function CorrectionsClient({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Cadet *</Label>
-                <Select value={corrForm.cadet_id} onValueChange={(v) => setCorrForm({ ...corrForm, cadet_id: v ?? "" })}>
-                  <SelectTrigger><SelectValue placeholder="Select cadet…" /></SelectTrigger>
-                  <SelectContent>
-                    {cadets.map((c) => <SelectItem key={c.id} value={c.id}>{c.rank ? `${c.rank} ` : ""}{c.full_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={corrForm.cadet_id}
+                  onChange={(v) => setCorrForm({ ...corrForm, cadet_id: v })}
+                  placeholder="Select cadet…"
+                  options={cadets.map((c) => ({ value: c.id, label: `${c.rank ? c.rank + " " : ""}${c.full_name}` }))}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Tier *</Label>
@@ -302,35 +408,155 @@ export function CorrectionsClient({
 
       {/* New PIP Dialog */}
       <Dialog open={showNewPip} onOpenChange={setShowNewPip}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Create Performance Improvement Plan</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Cadet *</Label>
-              <Select value={pipForm.cadet_id} onValueChange={(v) => setPipForm({ ...pipForm, cadet_id: v ?? "" })}>
-                <SelectTrigger><SelectValue placeholder="Select cadet…" /></SelectTrigger>
-                <SelectContent>
-                  {cadets.map((c) => <SelectItem key={c.id} value={c.id}>{c.rank ? `${c.rank} ` : ""}{c.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-[#003087]" />
+              Create Performance Improvement Plan
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+
+            {/* Section: Identification */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" /> Cadet & Supervisor
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Cadet *</Label>
+                  <SearchableSelect
+                    value={pipForm.cadet_id}
+                    onChange={(v) => setPipForm({ ...pipForm, cadet_id: v })}
+                    placeholder="Select cadet…"
+                    options={cadets.map((c) => ({ value: c.id, label: `${c.rank ? c.rank + " " : ""}${c.full_name}` }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Assigned Supervisor</Label>
+                  <SearchableSelect
+                    value={pipForm.supervisor_id}
+                    onChange={(v) => setPipForm({ ...pipForm, supervisor_id: v })}
+                    placeholder="Select supervisor…"
+                    options={staffProfiles.map((s) => ({ value: s.id, label: `${s.rank ? s.rank + " " : ""}${s.full_name}` }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Area of Concern *</Label>
+                <Select value={pipForm.area_of_concern} onValueChange={(v) => setPipForm({ ...pipForm, area_of_concern: v ?? "" })}>
+                  <SelectTrigger><SelectValue placeholder="Select primary area…" /></SelectTrigger>
+                  <SelectContent>
+                    {AREA_OF_CONCERN_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Root Cause Analysis *</Label>
-              <Textarea value={pipForm.root_cause} onChange={(e) => setPipForm({ ...pipForm, root_cause: e.target.value })} placeholder="What is the root cause of the performance issue?" rows={3} />
+
+            {/* Section: Analysis */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> Analysis & Requirements
+              </p>
+              <div className="space-y-1.5">
+                <Label>Root Cause Analysis *</Label>
+                <Textarea
+                  value={pipForm.root_cause}
+                  onChange={(e) => setPipForm({ ...pipForm, root_cause: e.target.value })}
+                  placeholder="Describe the root cause of the performance issue. Include specific incidents or patterns observed…"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Specific Improvement Requirements</Label>
+                <Textarea
+                  value={pipForm.specific_requirements}
+                  onChange={(e) => setPipForm({ ...pipForm, specific_requirements: e.target.value })}
+                  placeholder="List exact behaviors or standards the cadet must meet (e.g., &#39;Arrive in uniform NLT 1345 every drill&#39;, &#39;Zero Tier I or II corrections for 60 days&#39;)…"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Goals / Expected Outcomes</Label>
+                <Textarea
+                  value={pipForm.goals}
+                  onChange={(e) => setPipForm({ ...pipForm, goals: e.target.value })}
+                  placeholder="What does successful completion look like? Include measurable targets…"
+                  rows={2}
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Timeline</Label>
-              <Textarea value={pipForm.timeline} onChange={(e) => setPipForm({ ...pipForm, timeline: e.target.value })} placeholder="Milestones and check-in dates…" rows={2} />
+
+            {/* Section: Plan */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" /> Plan & Schedule
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Review / Target Completion Date</Label>
+                  <Input
+                    type="date"
+                    value={pipForm.review_date}
+                    onChange={(e) => setPipForm({ ...pipForm, review_date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Check-in Frequency</Label>
+                  <Select value={pipForm.meeting_frequency} onValueChange={(v) => setPipForm({ ...pipForm, meeting_frequency: v ?? "" })}>
+                    <SelectTrigger><SelectValue placeholder="Select frequency…" /></SelectTrigger>
+                    <SelectContent>
+                      {MEETING_FREQUENCY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Timeline / Milestones</Label>
+                <Textarea
+                  value={pipForm.timeline}
+                  onChange={(e) => setPipForm({ ...pipForm, timeline: e.target.value })}
+                  placeholder="List key milestones and checkpoint dates (e.g., Week 2: first check-in; Week 6: mid-point review)…"
+                  rows={2}
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Goals / Expected Outcomes</Label>
-              <Textarea value={pipForm.goals} onChange={(e) => setPipForm({ ...pipForm, goals: e.target.value })} placeholder="Specific, measurable goals…" rows={2} />
+
+            {/* Section: Support */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Support Resources
+              </p>
+              <div className="space-y-1.5">
+                <Label>Support / Resources Offered</Label>
+                <Textarea
+                  value={pipForm.support_resources}
+                  onChange={(e) => setPipForm({ ...pipForm, support_resources: e.target.value })}
+                  placeholder="What support is being provided? (e.g., mentoring from PO1, uniform loaner, academic help, additional drill time)…"
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">After creating this PIP:</p>
+              <ul className="mt-1 list-disc list-inside text-xs space-y-0.5 text-amber-700">
+                <li>The cadet will be notified immediately</li>
+                <li>Command staff (CO/XO) will be notified</li>
+                <li>The supervisor will be notified if assigned</li>
+                <li>Tasks can be added after creation from the PIP card</li>
+                <li>The cadet must acknowledge closure when this PIP is completed</li>
+              </ul>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setShowNewPip(false)}>Cancel</Button>
-            <Button onClick={createPip} disabled={saving || !pipForm.cadet_id || !pipForm.root_cause} className="bg-[#003087] hover:bg-[#002266]">
-              {saving ? "Saving…" : "Create PIP"}
+            <Button
+              onClick={createPipHandler}
+              disabled={saving || !pipForm.cadet_id || !pipForm.root_cause || !pipForm.area_of_concern}
+              className="bg-[#003087] hover:bg-[#002266]"
+            >
+              {saving ? "Creating…" : "Create PIP"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -480,6 +706,12 @@ function CorrectionCard({ correction: c, onApprove, onResolve }: {
           </div>
         )}
 
+        {c.status === "resolved" && (c.resolution_notes || c.resolved_at) && (
+          <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 space-y-0.5">
+            <p className="font-semibold flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" />Resolved {c.resolved_at ? format(new Date(c.resolved_at), "MMM d, yyyy 'at' HH:mm") : ""}</p>
+            {c.resolution_notes && <p className="italic">{c.resolution_notes}</p>}
+          </div>
+        )}
         {c.status === "open" && (
           <div className="flex gap-2 pt-1">
             {needsApproval && (
@@ -493,11 +725,25 @@ function CorrectionCard({ correction: c, onApprove, onResolve }: {
               </Button>
             )}
             {showResolve && (
-              <div className="flex flex-1 gap-2">
-                <Input value={resNotes} onChange={(e) => setResNotes(e.target.value)} placeholder="Resolution notes…" className="h-7 text-xs" />
-                <Button size="sm" className="h-7 text-xs bg-[#003087] hover:bg-[#002266]" onClick={() => { onResolve(c.id, resNotes); setShowResolve(false); }}>
-                  Confirm
-                </Button>
+              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                <Textarea
+                  value={resNotes}
+                  onChange={(e) => setResNotes(e.target.value)}
+                  placeholder="Resolution notes (required)…"
+                  rows={2}
+                  className="text-xs resize-none"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-[#003087] hover:bg-[#002266]"
+                    disabled={!resNotes.trim()}
+                    onClick={() => { onResolve(c.id, resNotes); setShowResolve(false); }}
+                  >
+                    Confirm Resolution
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowResolve(false)}>Cancel</Button>
+                </div>
               </div>
             )}
           </div>
@@ -507,10 +753,81 @@ function CorrectionCard({ correction: c, onApprove, onResolve }: {
   );
 }
 
-function PipCard({ pip, onClose }: { pip: PipRow; onClose: (id: string, status: "closed" | "failed", notes: string) => void }) {
+function PipCard({ pip, onClose, onFail, onDelete }: {
+  pip: PipRow;
+  onClose: (id: string, notes: string) => void;
+  onFail: (id: string, notes: string) => void;
+  onDelete: (id: string) => void;
+}) {
   const [notes, setNotes] = useState("");
+  const [showClose, setShowClose] = useState(false);
+  const [showFail, setShowFail] = useState(false);
+  const [failNotes, setFailNotes] = useState("");
+  const [tasks, setTasks] = useState<PipTask[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskDue, setNewTaskDue] = useState("");
+  const [savingTask, setSavingTask] = useState(false);
+
+  const loadTasks = async () => {
+    if (tasksLoaded) return;
+    const supabase = createClient();
+    const { data } = await supabase.from("pip_tasks").select("*").eq("pip_id", pip.id).order("created_at");
+    setTasks((data as PipTask[]) ?? []);
+    setTasksLoaded(true);
+  };
+
+  const toggleShowTasks = async () => {
+    if (!showTasks) await loadTasks();
+    setShowTasks((v) => !v);
+  };
+
+  const addTask = async () => {
+    if (!newTaskDesc.trim()) return;
+    setSavingTask(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("pip_tasks")
+      .insert({ pip_id: pip.id, description: newTaskDesc.trim(), due_date: newTaskDue || null })
+      .select()
+      .single();
+    setSavingTask(false);
+    if (error) { toast.error("Failed to add task"); return; }
+    setTasks((prev) => [...prev, data as PipTask]);
+    setNewTaskDesc("");
+    setNewTaskDue("");
+    toast.success("Task added");
+  };
+
+  const toggleTask = async (taskId: string, done: boolean) => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("pip_tasks")
+      .update({ completed_at: done ? new Date().toISOString() : null })
+      .eq("id", taskId);
+    if (error) { toast.error("Failed to update task"); return; }
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, completed_at: done ? new Date().toISOString() : null } : t));
+  };
+
+  const statusBadge = () => {
+    switch (pip.status) {
+      case "open": return "bg-amber-100 text-amber-800 border-amber-200";
+      case "pending_ack": return "bg-blue-100 text-blue-800 border-blue-200";
+      case "closed": return "bg-green-100 text-green-800 border-green-200";
+      case "failed": return "bg-red-100 text-red-800 border-red-200";
+      default: return "bg-gray-100 text-gray-600";
+    }
+  };
+  const statusLabel = () => {
+    switch (pip.status) {
+      case "pending_ack": return "Pending Acknowledgment";
+      default: return pip.status.charAt(0).toUpperCase() + pip.status.slice(1);
+    }
+  };
+
   return (
-    <Card className={pip.status !== "open" ? "opacity-60" : ""}>
+    <Card className={pip.status !== "open" && pip.status !== "pending_ack" ? "opacity-60" : ""}>
       <div className="p-4 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -518,25 +835,163 @@ function PipCard({ pip, onClose }: { pip: PipRow; onClose: (id: string, status: 
             <span className="font-semibold text-gray-900">
               {pip.cadet?.rank ? `${pip.cadet.rank} ` : ""}{pip.cadet?.full_name ?? "Unknown"}
             </span>
-            <Badge className={pip.status === "open" ? "bg-amber-100 text-amber-800" : pip.status === "closed" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-              {pip.status.charAt(0).toUpperCase() + pip.status.slice(1)}
-            </Badge>
+            <Badge className={statusBadge()} variant="outline">{statusLabel()}</Badge>
           </div>
-          <span className="text-xs text-gray-400">Opened {format(new Date(pip.opened_at), "MMM d, yyyy")}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Opened {format(new Date(pip.opened_at), "MMM d, yyyy")}</span>
+            <button
+              onClick={() => { if (confirm("Delete this PIP permanently?")) onDelete(pip.id); }}
+              className="text-red-400 hover:text-red-600 transition-colors"
+              title="Delete PIP"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="space-y-1 text-sm text-gray-700">
-          <p><span className="font-medium">Root Cause:</span> {pip.root_cause}</p>
-          {pip.timeline && <p><span className="font-medium">Timeline:</span> {pip.timeline}</p>}
-          {pip.goals && <p><span className="font-medium">Goals:</span> {pip.goals}</p>}
+        <div className="space-y-1.5 text-sm text-gray-700">
+          {(pip as Pip & { area_of_concern?: string | null }).area_of_concern && (
+            <div className="flex items-center gap-2">
+              <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">
+                {AREA_OF_CONCERN_OPTIONS.find((o) => o.value === (pip as Pip & { area_of_concern?: string | null }).area_of_concern)?.label ?? (pip as Pip & { area_of_concern?: string | null }).area_of_concern}
+              </Badge>
+              {(pip as Pip & { review_date?: string | null }).review_date && (
+                <span className="text-xs text-amber-700 flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  Review by {format(new Date((pip as Pip & { review_date?: string | null }).review_date!), "MMM d, yyyy")}
+                </span>
+              )}
+              {(pip as Pip & { meeting_frequency?: string | null }).meeting_frequency && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {MEETING_FREQUENCY_OPTIONS.find((o) => o.value === (pip as Pip & { meeting_frequency?: string | null }).meeting_frequency)?.label}
+                </span>
+              )}
+            </div>
+          )}
+          <div>
+            <span className="font-medium">Root Cause:</span> {pip.root_cause}
+          </div>
+          {(pip as Pip & { specific_requirements?: string | null }).specific_requirements && (
+            <div>
+              <span className="font-medium">Requirements:</span> {(pip as Pip & { specific_requirements?: string | null }).specific_requirements}
+            </div>
+          )}
+          {pip.goals && <div><span className="font-medium">Goals:</span> {pip.goals}</div>}
+          {pip.timeline && <div><span className="font-medium">Timeline:</span> {pip.timeline}</div>}
+          {(pip as Pip & { support_resources?: string | null }).support_resources && (
+            <div>
+              <span className="font-medium">Support Offered:</span> {(pip as Pip & { support_resources?: string | null }).support_resources}
+            </div>
+          )}
+          {pip.supervisor && (
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              Supervisor: {pip.supervisor.full_name}
+            </div>
+          )}
         </div>
-        {pip.status === "open" && (
-          <div className="flex gap-2 pt-1">
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Outcome notes…" className="h-8 text-xs" />
-            <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => onClose(pip.id, "closed", notes)}>Close</Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={() => onClose(pip.id, "failed", notes)}>Failed</Button>
+        {/* Task checklist */}
+        <div>
+          <button
+            onClick={toggleShowTasks}
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-[#003087]"
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            Tasks {tasksLoaded ? `(${tasks.length})` : ""}
+          </button>
+          {showTasks && (
+            <div className="mt-2 space-y-1.5">
+              {tasks.map((t) => (
+                <div key={t.id} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs ${t.completed_at ? "bg-green-50 border-green-200" : "bg-gray-50"}`}>
+                  <button
+                    onClick={() => toggleTask(t.id, !t.completed_at)}
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${t.completed_at ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-[#003087]"}`}
+                  >
+                    {t.completed_at && <Check className="h-3 w-3" />}
+                  </button>
+                  <span className={t.completed_at ? "line-through text-green-700" : "text-gray-700"}>{t.description}</span>
+                  {t.due_date && <span className="ml-auto shrink-0 text-gray-400">Due {format(new Date(t.due_date), "MMM d")}</span>}
+                </div>
+              ))}
+              {tasks.length === 0 && !savingTask && (
+                <p className="text-xs text-gray-400 italic">No tasks yet.</p>
+              )}
+              {pip.status === "open" && (
+                <div className="rounded border border-[#003087]/20 bg-blue-50 p-2 space-y-2">
+                  <Input value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} placeholder="Task description…" className="h-7 text-xs" />
+                  <div className="flex items-center gap-2">
+                    <Input type="date" value={newTaskDue} onChange={(e) => setNewTaskDue(e.target.value)} className="h-7 text-xs flex-1" />
+                    <Button size="sm" className="h-7 text-xs bg-[#003087] hover:bg-[#002266]" onClick={addTask} disabled={savingTask || !newTaskDesc.trim()}>
+                      {savingTask ? "…" : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {pip.status === "pending_ack" && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            Awaiting cadet acknowledgment — cadet must sign off in their portal.
           </div>
         )}
-        {pip.outcome_notes && <p className="text-xs text-gray-500 italic">Outcome: {pip.outcome_notes}</p>}
+        {pip.status === "open" && (
+          <>
+            {!showClose && !showFail && (
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="text-xs h-8 border-green-300 text-green-700 hover:bg-green-50" onClick={() => setShowClose(true)}>
+                  Close (Step 1 of 2)
+                </Button>
+                <Button size="sm" variant="outline" className="text-xs h-8 border-red-300 text-red-700 hover:bg-red-50" onClick={() => setShowFail(true)}>
+                  Mark Failed
+                </Button>
+              </div>
+            )}
+            {showClose && (
+              <div className="space-y-2 rounded-lg border border-green-200 bg-green-50 p-3">
+                <p className="text-xs font-semibold text-green-800">Step 1: Close PIP — cadet will acknowledge in Step 2</p>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Close-out notes (required for cadet acknowledgment)…"
+                  rows={2}
+                  className="text-xs resize-none"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={!notes.trim()} onClick={() => { onClose(pip.id, notes); setShowClose(false); }}>
+                    Submit
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowClose(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+            {showFail && (
+              <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-800">Mark PIP as Failed — this will be recorded with a timestamp</p>
+                <Textarea
+                  value={failNotes}
+                  onChange={(e) => setFailNotes(e.target.value)}
+                  placeholder="Describe why the PIP was not completed (required)…"
+                  rows={2}
+                  className="text-xs resize-none"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" disabled={!failNotes.trim()} onClick={() => { onFail(pip.id, failNotes); setShowFail(false); }}>
+                    Confirm Failure
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowFail(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {pip.outcome_notes && (
+          <div className={`rounded-md border px-3 py-2 text-xs space-y-0.5 ${pip.status === "failed" ? "border-red-200 bg-red-50 text-red-800" : "border-green-200 bg-green-50 text-green-800"}`}>
+            <p className="font-semibold">{pip.status === "failed" ? "Failed" : "Closed"}{pip.closed_at ? ` · ${format(new Date(pip.closed_at), "MMM d, yyyy 'at' HH:mm")}` : ""}</p>
+            <p className="italic">{pip.outcome_notes}</p>
+          </div>
+        )}
       </div>
     </Card>
   );

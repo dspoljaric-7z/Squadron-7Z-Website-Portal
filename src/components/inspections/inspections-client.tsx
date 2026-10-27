@@ -1,243 +1,573 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { ClipboardCheck, Plus, X, ChevronRight, CheckCircle2, XCircle, AlertCircle, Settings, Trash2 } from "lucide-react";
+import { HintButton } from "@/components/shared/hint-button";
+
+const INSPECTIONS_HINTS = [
+  { heading: "Starting an inspection", body: "Click 'New Inspection Session', choose the date, and select the cadets present. The portal pre-loads all active cadets." },
+  { heading: "Grading items", body: "For each cadet, mark each inspection item as Pass, Fail, or N/A. Add notes on specific items if needed." },
+  { heading: "Inspection items", body: "Click the 'Items' button to manage the inspection checklist — add, edit, or remove items like cover, uniform, brass, etc." },
+  { heading: "Scores and records", body: "Completed inspection scores roll up into each cadet's attendance and record page, visible to the cadet and command staff." },
+];
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Plus, Shirt, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
-import { format, subYears } from "date-fns";
-import { toast } from "sonner";
-import { initials } from "@/lib/format";
-import type { Profile, UniformInspectionSession, UniformInspectionResult } from "@/types/database";
+import type { Profile, UniformInspectionSession, UniformInspectionResult, InspectionItemDef } from "@/types/database";
+import { addInspectionItem, deactivateInspectionItem } from "@/app/(app)/settings/actions";
 
-type SessionRow = UniformInspectionSession & {
-  conductor: { full_name: string } | null;
-  uniform_inspection_results: UniformInspectionResult[];
+const SCORE_LABELS: Record<number, { label: string; color: string; bg: string }> = {
+  1: { label: "Poor", color: "text-red-600", bg: "bg-red-100 border-red-300" },
+  2: { label: "Needs Work", color: "text-amber-600", bg: "bg-amber-100 border-amber-300" },
+  3: { label: "Satisfactory", color: "text-blue-600", bg: "bg-blue-100 border-blue-300" },
+  4: { label: "Outstanding", color: "text-green-600", bg: "bg-green-100 border-green-300" },
 };
 
-type CadetRow = { id: string; full_name: string; rank: string | null; billet: string | null; division_id: string | null };
+type ProfileSnippet = Pick<Profile, "id" | "full_name" | "rank" | "role">;
+type DrillSnippet = { id: string; date: string };
+type SessionWithResults = UniformInspectionSession & { results?: (UniformInspectionResult & { profile?: ProfileSnippet })[] };
+type ItemDef = { id: string; key: string; label: string };
+
+function avgScore(scores: Record<string, number> | null): number | null {
+  if (!scores) return null;
+  const vals = Object.values(scores).filter((v) => v > 0);
+  if (vals.length === 0) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function ScorePill({ score }: { score: number | null }) {
+  if (score === null) return <span className="text-xs text-gray-300">—</span>;
+  const s = SCORE_LABELS[Math.round(score)];
+  if (!s) return null;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold border ${s.bg} ${s.color}`}>
+      {score.toFixed(1)}
+    </span>
+  );
+}
+
+function ManageItemsDialog({
+  items,
+  onAdded,
+  onRemoved,
+  onClose,
+}: {
+  items: ItemDef[];
+  onAdded: (item: InspectionItemDef) => void;
+  onRemoved: (key: string) => void;
+  onClose: () => void;
+}) {
+  const [newLabel, setNewLabel] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
+    if (!newLabel.trim()) return;
+    setAdding(true);
+    const key = newLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const res = await addInspectionItem(key, newLabel.trim());
+    setAdding(false);
+    if (res.error) { toast.error(res.error); return; }
+    onAdded(res.data as unknown as InspectionItemDef);
+    setNewLabel("");
+    toast.success("Item added");
+  };
+
+  const handleRemove = async (item: ItemDef) => {
+    if (!confirm(`Remove "${item.label}" from inspections?`)) return;
+    const res = await deactivateInspectionItem(item.id);
+    if (res.error) { toast.error(res.error); return; }
+    onRemoved(item.key);
+    toast.success("Item removed");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <h2 className="font-bold text-gray-800">Manage Inspection Items</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {items.map((item) => (
+            <div key={item.key} className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <p className="text-sm font-semibold text-gray-800">{item.label}</p>
+              <button onClick={() => handleRemove(item)} className="text-red-400 hover:text-red-600">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          <div className="border-t pt-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Add Item</p>
+            <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="e.g. Cover, Boots, Ribbons…"
+              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30" />
+            <Button onClick={handleAdd} disabled={adding || !newLabel.trim()} size="sm" className="w-full bg-[#003087] hover:bg-[#002266]">
+              <Plus className="h-3.5 w-3.5 mr-1.5" />{adding ? "Adding…" : "Add Item"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CadetScoringSheet({
+  cadet,
+  existing,
+  items,
+  onSave,
+  onClose,
+}: {
+  cadet: ProfileSnippet;
+  existing: UniformInspectionResult | null;
+  items: ItemDef[];
+  onSave: (result: UniformInspectionResult) => void;
+  onClose: () => void;
+}) {
+  const [scores, setScores] = useState<Record<string, number>>(
+    (existing?.scores as Record<string, number>) ?? {}
+  );
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const avg = avgScore(scores);
+  const passed = avg !== null ? avg >= 2.5 : false;
+  const scoredCount = Object.keys(scores).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b px-5 py-4 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="font-bold text-gray-800">{cadet.full_name}</h2>
+            {cadet.rank && <p className="text-xs text-gray-400">{cadet.rank}</p>}
+          </div>
+          <div className="flex items-center gap-3">
+            {avg !== null && (
+              <div className="text-right">
+                <ScorePill score={avg} />
+                <p className="text-[10px] text-gray-400 mt-0.5">{scoredCount}/{items.length} items</p>
+              </div>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {items.map(({ key, label }) => {
+            const score = scores[key] ?? 0;
+            return (
+              <div key={key} className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">{label}</span>
+                  {score > 0 && (
+                    <span className={`text-xs font-semibold ${SCORE_LABELS[score].color}`}>
+                      {SCORE_LABELS[score].label}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((val) => {
+                    const s = SCORE_LABELS[val];
+                    const active = score === val;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => setScores((prev) => {
+                          if (prev[key] === val) {
+                            const { [key]: _, ...rest } = prev;
+                            void _;
+                            return rest;
+                          }
+                          return { ...prev, [key]: val };
+                        })}
+                        className={`h-12 rounded-xl border-2 text-sm font-bold transition-all active:scale-95 ${
+                          active
+                            ? `${s.bg} ${s.color} border-current shadow-sm`
+                            : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="pt-2">
+            <label className="mb-1 block text-sm font-medium text-gray-600">Notes / Deficiencies</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. lint on left sleeve, ribbon slightly off center…"
+              rows={2}
+              className="w-full resize-none rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+            />
+          </div>
+
+          {avg !== null && (
+            <div className={`flex items-center gap-2 rounded-lg p-3 ${passed ? "bg-green-50" : "bg-red-50"}`}>
+              {passed
+                ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                : <XCircle className="h-4 w-4 text-red-500" />}
+              <span className={`text-sm font-semibold ${passed ? "text-green-700" : "text-red-600"}`}>
+                {passed ? "PASS" : "FAIL"} — Average {avg.toFixed(1)}/4.0
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t px-5 py-4 sticky bottom-0 bg-white">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={async () => {
+              setSaving(true);
+              // saved by parent
+              onSave({
+                ...(existing ?? { id: "", inspection_session_id: "", cadet_id: cadet.id, created_at: "" }),
+                scores: Object.keys(scores).length > 0 ? scores : null,
+                notes: notes.trim() || null,
+                passed,
+                deficiencies: notes.trim() || null,
+              } as UniformInspectionResult);
+              setSaving(false);
+            }}
+            disabled={saving || scoredCount === 0}
+            className="bg-[#003087] hover:bg-[#002266]"
+          >
+            {saving ? "Saving…" : "Save Score"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function InspectionsClient({
   initialSessions,
-  cadets,
-  profile,
+  allProfiles,
+  recentDrills,
+  inspectionItems: initialItems,
+  canManageItems,
 }: {
-  initialSessions: SessionRow[];
-  cadets: CadetRow[];
-  profile: Profile;
+  currentProfile?: Profile;
+  initialSessions: UniformInspectionSession[];
+  allProfiles: ProfileSnippet[];
+  recentDrills: DrillSnippet[];
+  inspectionItems: InspectionItemDef[];
+  canManageItems: boolean;
 }) {
-  const [sessions, setSessions] = useState(initialSessions);
-  const [showNew, setShowNew] = useState(false);
-  const [activeSession, setActiveSession] = useState<SessionRow | null>(null);
-  const [results, setResults] = useState<Map<string, { passed: boolean; deficiencies: string; notes: string }>>(new Map());
-  const [saving, setSaving] = useState(false);
-  const [newForm, setNewForm] = useState({ date: new Date().toISOString().split("T")[0], notes: "" });
+  const [sessions, setSessions] = useState<SessionWithResults[]>(initialSessions);
+  const [inspectionItems, setInspectionItems] = useState<ItemDef[]>(
+    initialItems.map((i) => ({ id: i.id, key: i.item_key, label: i.label }))
+  );
+  const [showManageItems, setShowManageItems] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sessionResults, setSessionResults] = useState<Record<string, (UniformInspectionResult & { profile?: ProfileSnippet })[]>>({});
+  const [scoringCadet, setScoringCadet] = useState<ProfileSnippet | null>(null);
+  const [showNewSession, setShowNewSession] = useState(false);
+  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newDrillId, setNewDrillId] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [loadingSession, setLoadingSession] = useState<string | null>(null);
 
-  // Rolling 12-month fail count per cadet (informational only, not automatic escalation)
-  const failCounts = useMemo(() => {
-    const cutoff = subYears(new Date(), 1);
-    const counts = new Map<string, number>();
-    for (const s of sessions) {
-      const sessionDate = new Date(s.date);
-      if (sessionDate < cutoff) continue;
-      for (const r of s.uniform_inspection_results) {
-        if (!r.passed) {
-          counts.set(r.cadet_id, (counts.get(r.cadet_id) ?? 0) + 1);
-        }
-      }
-    }
-    return counts;
-  }, [sessions]);
+  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
+  const activeResults = activeSessionId ? (sessionResults[activeSessionId] ?? []) : [];
 
-  const startSession = async () => {
-    if (!newForm.date) return;
-    setSaving(true);
+  const loadSession = async (sessionId: string) => {
+    if (sessionResults[sessionId]) { setActiveSessionId(sessionId); return; }
+    setLoadingSession(sessionId);
     const supabase = createClient();
+    const { data } = await supabase
+      .from("uniform_inspection_results")
+      .select("*")
+      .eq("inspection_session_id", sessionId);
+    const profMap = Object.fromEntries(allProfiles.map((p) => [p.id, p]));
+    const enriched = (data ?? []).map((r) => ({ ...r, profile: profMap[r.cadet_id] })) as (UniformInspectionResult & { profile?: ProfileSnippet })[];
+    setSessionResults((prev) => ({ ...prev, [sessionId]: enriched }));
+    setActiveSessionId(sessionId);
+    setLoadingSession(null);
+  };
+
+  const createSession = async () => {
+    if (!newDate) return;
+    setCreating(true);
+    const supabase = createClient();
+    const { data: me } = await supabase.from("profiles").select("id").eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle();
     const { data, error } = await supabase
       .from("uniform_inspection_sessions")
-      .insert({ date: newForm.date, conducted_by: profile.id, notes: newForm.notes || null })
-      .select("*, conductor:profiles!uniform_inspection_sessions_conducted_by_fkey(full_name), uniform_inspection_results(*)")
+      .insert({
+        date: newDate,
+        drill_session_id: newDrillId || null,
+        conducted_by: me?.id ?? null,
+        notes: newNotes.trim() || null,
+      } as never)
+      .select()
       .single();
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    const session = data as unknown as SessionRow;
-    setSessions((prev) => [session, ...prev]);
-    // Pre-populate result map for all cadets
-    const initMap = new Map<string, { passed: boolean; deficiencies: string; notes: string }>();
-    for (const c of cadets) {
-      initMap.set(c.id, { passed: true, deficiencies: "", notes: "" });
-    }
-    setResults(initMap);
-    setActiveSession(session);
-    setShowNew(false);
+    setCreating(false);
+    if (error) { toast.error("Failed to create session"); return; }
+    setSessions((prev) => [data as UniformInspectionSession, ...prev]);
+    setSessionResults((prev) => ({ ...prev, [(data as UniformInspectionSession).id]: [] }));
+    setActiveSessionId((data as UniformInspectionSession).id);
+    setShowNewSession(false);
+    setNewNotes("");
+    setNewDrillId("");
+    toast.success("Inspection session created");
   };
 
-  const saveResults = async () => {
-    if (!activeSession) return;
-    setSaving(true);
+  const saveScore = async (result: UniformInspectionResult) => {
+    if (!activeSessionId || !scoringCadet) return;
     const supabase = createClient();
-    const rows = Array.from(results.entries()).map(([cadet_id, r]) => ({
-      inspection_session_id: activeSession.id,
-      cadet_id,
-      passed: r.passed,
-      deficiencies: r.deficiencies || null,
-      notes: r.notes || null,
-    }));
-    const { error } = await supabase.from("uniform_inspection_results").upsert(rows, { onConflict: "inspection_session_id,cadet_id" });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Inspection results saved");
-    setActiveSession(null);
+    const existing = activeResults.find((r) => r.cadet_id === scoringCadet.id);
+
+    let saved: UniformInspectionResult;
+    if (existing) {
+      const { data, error } = await supabase
+        .from("uniform_inspection_results")
+        .update({ scores: result.scores as never, notes: result.notes, passed: result.passed, deficiencies: result.deficiencies } as never)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (error) { toast.error("Failed to save"); return; }
+      saved = data as UniformInspectionResult;
+    } else {
+      const { data, error } = await supabase
+        .from("uniform_inspection_results")
+        .insert({
+          inspection_session_id: activeSessionId,
+          cadet_id: scoringCadet.id,
+          scores: result.scores as never,
+          notes: result.notes,
+          passed: result.passed,
+          deficiencies: result.deficiencies,
+        } as never)
+        .select()
+        .single();
+      if (error) { toast.error("Failed to save"); return; }
+      saved = data as UniformInspectionResult;
+    }
+
+    const enriched = { ...saved, profile: scoringCadet };
+    setSessionResults((prev) => {
+      const cur = prev[activeSessionId] ?? [];
+      const exists = cur.find((r) => r.cadet_id === scoringCadet.id);
+      return {
+        ...prev,
+        [activeSessionId]: exists
+          ? cur.map((r) => (r.cadet_id === scoringCadet.id ? enriched : r))
+          : [...cur, enriched],
+      };
+    });
+    setScoringCadet(null);
+    toast.success("Score saved");
   };
 
-  const passCount = Array.from(results.values()).filter((r) => r.passed).length;
-  const totalInActive = results.size;
+  const scoringExisting = scoringCadet
+    ? (activeResults.find((r) => r.cadet_id === scoringCadet.id) ?? null)
+    : null;
 
-  if (activeSession) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <button onClick={() => setActiveSession(null)} className="mb-1 text-sm text-gray-500 hover:text-gray-700">← Back</button>
-            <h1 className="text-xl font-bold text-gray-900">
-              Inspection — {format(new Date(activeSession.date + "T12:00:00"), "MMM d, yyyy")}
-            </h1>
-            <p className="text-sm text-gray-500">{passCount}/{totalInActive} passed</p>
-          </div>
-          <Button onClick={saveResults} disabled={saving} className="bg-[#003087] hover:bg-[#002266]">
-            {saving ? "Saving…" : "Save Results"}
-          </Button>
-        </div>
-
-        <div className="space-y-1">
-          {cadets.map((cadet) => {
-            const r = results.get(cadet.id) ?? { passed: true, deficiencies: "", notes: "" };
-            const failCount12mo = failCounts.get(cadet.id) ?? 0;
-            return (
-              <Card key={cadet.id} className={`p-3 ${!r.passed ? "border-red-200 bg-red-50" : ""}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${r.passed ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                    {initials(cadet.full_name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900">{cadet.rank ? `${cadet.rank} ` : ""}{cadet.full_name}</p>
-                      {failCount12mo >= 2 && (
-                        <span className="flex items-center gap-0.5 text-xs text-amber-600">
-                          <AlertTriangle className="h-3 w-3" />{failCount12mo} fails (12mo)
-                        </span>
-                      )}
-                    </div>
-                    {!r.passed && (
-                      <Input
-                        value={r.deficiencies}
-                        onChange={(e) => setResults((prev) => new Map(prev).set(cadet.id, { ...r, deficiencies: e.target.value }))}
-                        placeholder="Deficiencies…"
-                        className="mt-1 h-7 text-xs"
-                      />
-                    )}
-                  </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button
-                      onClick={() => setResults((prev) => new Map(prev).set(cadet.id, { ...r, passed: true }))}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${r.passed ? "bg-green-500 text-white" : "bg-gray-100 text-gray-400 hover:bg-green-100"}`}
-                    >
-                      <CheckCircle className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => setResults((prev) => new Map(prev).set(cadet.id, { ...r, passed: false }))}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${!r.passed ? "bg-red-500 text-white" : "bg-gray-100 text-gray-400 hover:bg-red-100"}`}
-                    >
-                      <XCircle className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  const passCount = activeResults.filter((r) => r.passed).length;
+  const inspectedIds = new Set(activeResults.map((r) => r.cadet_id));
+  const uninspected = allProfiles.filter((p) => !inspectedIds.has(p.id));
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Shirt className="h-5 w-5 text-[#003087]" />
-            <h1 className="text-xl font-bold text-gray-900">Uniform Inspections</h1>
-          </div>
-          <p className="text-sm text-gray-500">{sessions.length} inspection{sessions.length !== 1 ? "s" : ""} recorded</p>
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-5 w-5 text-[#003087]" />
+          <h1 className="text-xl font-bold text-gray-900">Uniform Inspections</h1>
+          <HintButton title="Uniform Inspections" hints={INSPECTIONS_HINTS} />
         </div>
-        <Button onClick={() => setShowNew(!showNew)} className="bg-[#003087] hover:bg-[#002266]" size="sm">
-          <Plus className="mr-1.5 h-4 w-4" /> New Inspection
-        </Button>
+        <div className="flex items-center gap-2">
+          {canManageItems && (
+            <button
+              onClick={() => setShowManageItems(true)}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <Settings className="h-4 w-4" /> Items
+            </button>
+          )}
+          <Button onClick={() => setShowNewSession(true)} size="sm" className="bg-[#003087] hover:bg-[#002266]">
+            <Plus className="mr-1.5 h-4 w-4" /> New Inspection
+          </Button>
+        </div>
       </div>
 
-      {showNew && (
-        <Card className="p-4 space-y-4">
-          <h2 className="font-semibold">New Inspection Session</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Date *</Label>
-              <Input type="date" value={newForm.date} onChange={(e) => setNewForm({ ...newForm, date: e.target.value })} />
+      {/* Session picker or active session */}
+      {!activeSessionId ? (
+        <div className="space-y-2">
+          {sessions.length === 0 && (
+            <div className="rounded-lg border border-dashed p-10 text-center text-sm text-gray-400">
+              No inspection sessions yet. Start one before the next drill.
             </div>
-            <div className="space-y-1.5">
-              <Label>Notes</Label>
-              <Input value={newForm.notes} onChange={(e) => setNewForm({ ...newForm, notes: e.target.value })} placeholder="Optional" />
+          )}
+          {sessions.map((s) => (
+            <Card
+              key={s.id}
+              className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+              onClick={() => loadSession(s.id)}
+            >
+              <div>
+                <p className="font-semibold text-gray-800">{new Date(s.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</p>
+                {s.notes && <p className="text-xs text-gray-400">{s.notes}</p>}
+              </div>
+              <div className="flex items-center gap-3">
+                {loadingSession === s.id
+                  ? <span className="text-xs text-gray-400">Loading…</span>
+                  : <ChevronRight className="h-4 w-4 text-gray-400" />}
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Session header */}
+          <div className="flex items-center justify-between">
+            <button onClick={() => setActiveSessionId(null)} className="text-sm text-[#003087] hover:underline">
+              ← All Sessions
+            </button>
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <span className="font-semibold text-gray-700">
+                {new Date(activeSession!.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </span>
+              <Badge className="bg-green-100 text-green-700 border-green-200">{passCount} pass</Badge>
+              <Badge className="bg-red-100 text-red-700 border-red-200">{activeResults.length - passCount} fail</Badge>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={startSession} disabled={saving || !newForm.date} className="bg-[#003087] hover:bg-[#002266]">
-              Start Inspection ({cadets.length} cadets)
-            </Button>
-            <Button variant="outline" onClick={() => setShowNew(false)}>Cancel</Button>
-          </div>
-        </Card>
+
+          {/* Inspected cadets */}
+          {activeResults.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Inspected ({activeResults.length})</p>
+              <div className="space-y-1.5">
+                {activeResults.map((r) => {
+                  const avg = avgScore(r.scores);
+                  return (
+                    <Card
+                      key={r.id}
+                      className="flex cursor-pointer items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                      onClick={() => setScoringCadet(r.profile ?? allProfiles.find((p) => p.id === r.cadet_id) ?? null)}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{r.profile?.full_name ?? r.cadet_id}</p>
+                        {r.profile?.rank && <p className="text-xs text-gray-400">{r.profile.rank}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {r.notes && <AlertCircle className="h-3.5 w-3.5 text-amber-400" />}
+                        <ScorePill score={avg} />
+                        {r.passed
+                          ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          : <XCircle className="h-4 w-4 text-red-400" />}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Not yet inspected */}
+          {uninspected.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Not Yet Inspected ({uninspected.length})</p>
+              <div className="space-y-1.5">
+                {uninspected.map((p) => (
+                  <Card
+                    key={p.id}
+                    className="flex cursor-pointer items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors border-dashed"
+                    onClick={() => setScoringCadet(p)}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">{p.full_name}</p>
+                      {p.rank && <p className="text-xs text-gray-400">{p.rank}</p>}
+                    </div>
+                    <span className="text-xs text-gray-300">Tap to score →</span>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      <div className="space-y-2">
-        {sessions.map((s) => {
-          const passed = s.uniform_inspection_results.filter((r) => r.passed).length;
-          const total = s.uniform_inspection_results.length;
-          return (
-            <Card key={s.id} className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{format(new Date(s.date + "T12:00:00"), "EEEE, MMMM d, yyyy")}</p>
-                  <p className="text-sm text-gray-500">
-                    {s.conductor?.full_name ? `Conducted by ${s.conductor.full_name} · ` : ""}
-                    {total > 0 ? `${passed}/${total} passed` : "No results recorded"}
-                  </p>
-                </div>
-                {total > 0 && (
-                  <Badge className={passed === total ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
-                    {total > 0 ? `${Math.round((passed / total) * 100)}%` : "—"}
-                  </Badge>
-                )}
+      {/* New session modal */}
+      {showNewSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <h2 className="font-bold text-gray-800">New Inspection Session</h2>
+              <button onClick={() => setShowNewSession(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Date *</label>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+                />
               </div>
-              {s.uniform_inspection_results.filter((r) => !r.passed).length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {s.uniform_inspection_results.filter((r) => !r.passed).map((r) => {
-                    const cadet = cadets.find((c) => c.id === r.cadet_id);
-                    return (
-                      <div key={r.id} className="flex items-center gap-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
-                        <XCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium">{cadet?.full_name ?? "Unknown"}</span>
-                        {r.deficiencies && <span className="text-red-500">— {r.deficiencies}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Linked Drill (optional)</label>
+                <select
+                  value={newDrillId}
+                  onChange={(e) => setNewDrillId(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+                >
+                  <option value="">— None —</option>
+                  {recentDrills.map((d) => (
+                    <option key={d.id} value={d.id}>{d.date}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Notes (optional)</label>
+                <input
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="e.g. Pre-inspection before formal review"
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4">
+              <Button variant="outline" onClick={() => setShowNewSession(false)}>Cancel</Button>
+              <Button onClick={createSession} disabled={creating || !newDate} className="bg-[#003087] hover:bg-[#002266]">
+                {creating ? "Creating…" : "Create Session"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cadet scoring sheet */}
+      {scoringCadet && (
+        <CadetScoringSheet
+          cadet={scoringCadet}
+          existing={scoringExisting}
+          items={inspectionItems}
+          onSave={saveScore}
+          onClose={() => setScoringCadet(null)}
+        />
+      )}
+
+      {showManageItems && (
+        <ManageItemsDialog
+          items={inspectionItems}
+          onAdded={(item) => setInspectionItems((prev) => [...prev, { id: item.id, key: item.item_key, label: item.label }])}
+          onRemoved={(key) => setInspectionItems((prev) => prev.filter((i) => i.key !== key))}
+          onClose={() => setShowManageItems(false)}
+        />
+      )}
     </div>
   );
 }

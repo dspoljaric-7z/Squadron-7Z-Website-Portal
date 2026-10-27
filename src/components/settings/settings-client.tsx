@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { User, Lock, Shield, CheckCircle2 } from "lucide-react";
+import { User, Lock, Shield, CheckCircle2, Bell, Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { updateProfile, changePassword } from "@/app/(app)/settings/actions";
+import { updateProfile, changePassword, updateNotificationTemplate, getNotificationTemplates, getUnitSettings, updateUnitSettings } from "@/app/(app)/settings/actions";
 import { roleLabel } from "@/lib/format";
 import type { Profile } from "@/types/database";
 import { useSearchParams } from "next/navigation";
+import React from "react";
+
+type NotifTemplate = { id: string; key: string; label: string; description: string | null; title_template: string; body_template: string };
 
 export function SettingsClient({ profile }: { profile: Profile }) {
   const searchParams = useSearchParams();
@@ -23,6 +26,35 @@ export function SettingsClient({ profile }: { profile: Profile }) {
   const [bio, setBio] = useState(profile.bio ?? "");
   const [phone, setPhone] = useState(profile.contact_phone ?? "");
   const [profilePending, startProfileTransition] = useTransition();
+
+  // Tab state
+  const [settingsTab, setSettingsTab] = useState<string>(isWelcome ? "password" : "profile");
+
+  // Notification templates (officer only)
+  const [templates, setTemplates] = useState<NotifTemplate[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState<NotifTemplate | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Unit settings (command only)
+  type UnitSettings = { id?: string; unit_name?: string; unit_number?: string; default_drill_location?: string; unit_motto?: string; contact_email?: string; contact_phone?: string };
+  const [unitSettings, setUnitSettings] = useState<UnitSettings>({});
+  const [unitSettingsLoaded, setUnitSettingsLoaded] = useState(false);
+  const [savingUnit, setSavingUnit] = useState(false);
+
+  useEffect(() => {
+    if ((profile.role === "officer" || profile.role === "snco") && settingsTab === "templates") {
+      getNotificationTemplates().then((res) => {
+        if (res.data) setTemplates(res.data as NotifTemplate[]);
+      });
+    }
+    if ((profile.role === "officer" || profile.is_command) && settingsTab === "unit" && !unitSettingsLoaded) {
+      getUnitSettings().then((res) => {
+        if (res.data) setUnitSettings(res.data as UnitSettings);
+        setUnitSettingsLoaded(true);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsTab, profile.role, profile.is_command]);
 
   // Password form
   const [currentPw, setCurrentPw] = useState("");
@@ -91,15 +123,33 @@ export function SettingsClient({ profile }: { profile: Profile }) {
         </div>
       </Card>
 
-      <Tabs defaultValue={isWelcome ? "password" : "profile"}>
-        <TabsList>
-          <TabsTrigger value="profile"><User className="mr-1.5 h-3.5 w-3.5" />Profile</TabsTrigger>
-          <TabsTrigger value="password"><Lock className="mr-1.5 h-3.5 w-3.5" />Password</TabsTrigger>
-          <TabsTrigger value="account"><Shield className="mr-1.5 h-3.5 w-3.5" />Account Info</TabsTrigger>
-        </TabsList>
+      <div className="space-y-4">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex">
+            {([
+              { value: "profile",  label: "Profile",      icon: User },
+              { value: "password", label: "Password",     icon: Lock },
+              { value: "account",  label: "Account Info", icon: Shield },
+              ...((profile.role === "officer" || profile.role === "snco") ? [{ value: "templates", label: "Email Templates", icon: Bell }] : []),
+              ...((profile.role === "officer" || profile.is_command) ? [{ value: "unit", label: "Unit Settings", icon: Building2 }] : []),
+            ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setSettingsTab(value)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  settingsTab === value
+                    ? "border-[#003087] text-[#003087]"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />{label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
         {/* Profile tab */}
-        <TabsContent value="profile" className="mt-4 space-y-4">
+        {settingsTab === "profile" && <div className="space-y-4">
           <Card className="p-4 space-y-4">
             <h2 className="font-semibold text-gray-900">Display Preferences</h2>
             <div className="space-y-1">
@@ -136,10 +186,10 @@ export function SettingsClient({ profile }: { profile: Profile }) {
               {profilePending ? "Saving…" : "Save Profile"}
             </Button>
           </Card>
-        </TabsContent>
+        </div>}
 
         {/* Password tab */}
-        <TabsContent value="password" className="mt-4">
+        {settingsTab === "password" && <div>
           <Card className="p-4 space-y-4">
             <h2 className="font-semibold text-gray-900">Change Password</h2>
             {isWelcome && (
@@ -163,10 +213,10 @@ export function SettingsClient({ profile }: { profile: Profile }) {
               {pwPending ? "Changing…" : "Change Password"}
             </Button>
           </Card>
-        </TabsContent>
+        </div>}
 
         {/* Account Info tab */}
-        <TabsContent value="account" className="mt-4">
+        {settingsTab === "account" && <div>
           <Card className="divide-y p-0 overflow-hidden">
             {[
               { label: "Full Name", value: profile.full_name },
@@ -186,8 +236,172 @@ export function SettingsClient({ profile }: { profile: Profile }) {
           <p className="mt-2 text-xs text-gray-400">
             Rank, billet, and division are managed by officers. Contact your CO or XO for corrections.
           </p>
-        </TabsContent>
-      </Tabs>
+        </div>}
+
+        {/* Notification Templates tab — officers + SNCOs */}
+        {settingsTab === "templates" && (profile.role === "officer" || profile.role === "snco") && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">Notification & Email Templates</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Customize the messages cadets receive from portal actions. Use <code className="bg-gray-100 px-1 rounded text-xs">{"{variable}"}</code> placeholders.
+              </p>
+            </div>
+            {templates.length === 0 && (
+              <Card className="p-6 text-center text-sm text-gray-400">Loading templates…</Card>
+            )}
+            {templates.map((t) => (
+              <Card key={t.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">{t.label}</p>
+                    {t.description && <p className="text-xs text-gray-400 mt-0.5">{t.description}</p>}
+                    {editingTemplate?.id !== t.id && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-gray-500"><span className="font-medium">Subject:</span> {t.title_template}</p>
+                        <p className="text-xs text-gray-500"><span className="font-medium">Body:</span> {t.body_template}</p>
+                      </div>
+                    )}
+                    {editingTemplate?.id === t.id && (
+                      <div className="mt-3 space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Subject / Title</Label>
+                          <Input
+                            value={editingTemplate.title_template}
+                            onChange={(e) => setEditingTemplate({ ...editingTemplate, title_template: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Body</Label>
+                          <Textarea
+                            rows={4}
+                            value={editingTemplate.body_template}
+                            onChange={(e) => setEditingTemplate({ ...editingTemplate, body_template: e.target.value })}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-[#003087] hover:bg-[#002266]"
+                            disabled={savingTemplate}
+                            onClick={async () => {
+                              setSavingTemplate(true);
+                              const res = await updateNotificationTemplate(editingTemplate.id, editingTemplate.title_template, editingTemplate.body_template);
+                              setSavingTemplate(false);
+                              if (res.error) { toast.error(res.error); return; }
+                              setTemplates((prev) => prev.map((x) => x.id === editingTemplate.id ? { ...x, ...editingTemplate } : x));
+                              setEditingTemplate(null);
+                              toast.success("Template saved");
+                            }}
+                          >
+                            {savingTemplate ? "Saving…" : "Save"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingTemplate(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {editingTemplate?.id !== t.id && (
+                    <Button size="sm" variant="outline" onClick={() => setEditingTemplate({ ...t })}>Edit</Button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+        {/* Unit Settings tab — officers + command */}
+        {settingsTab === "unit" && (profile.role === "officer" || profile.is_command) && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">Unit Settings</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Displayed throughout the portal. Changes take effect immediately after saving.
+              </p>
+            </div>
+            {!unitSettingsLoaded ? (
+              <Card className="p-6 text-center text-sm text-gray-400">Loading…</Card>
+            ) : (
+              <Card className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Unit Name</Label>
+                    <Input
+                      value={unitSettings.unit_name ?? ""}
+                      onChange={(e) => setUnitSettings((s) => ({ ...s, unit_name: e.target.value }))}
+                      placeholder="e.g. SQ-7 NSCC"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Unit Number</Label>
+                    <Input
+                      value={unitSettings.unit_number ?? ""}
+                      onChange={(e) => setUnitSettings((s) => ({ ...s, unit_number: e.target.value }))}
+                      placeholder="e.g. 7"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Default Drill Location</Label>
+                  <Input
+                    value={unitSettings.default_drill_location ?? ""}
+                    onChange={(e) => setUnitSettings((s) => ({ ...s, default_drill_location: e.target.value }))}
+                    placeholder="e.g. Tabor Academy Field House"
+                  />
+                  <p className="text-xs text-gray-400">Pre-fills when creating new drill sessions.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Unit Motto</Label>
+                  <Input
+                    value={unitSettings.unit_motto ?? ""}
+                    onChange={(e) => setUnitSettings((s) => ({ ...s, unit_motto: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Contact Email</Label>
+                    <Input
+                      type="email"
+                      value={unitSettings.contact_email ?? ""}
+                      onChange={(e) => setUnitSettings((s) => ({ ...s, contact_email: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Contact Phone</Label>
+                    <Input
+                      type="tel"
+                      value={unitSettings.contact_phone ?? ""}
+                      onChange={(e) => setUnitSettings((s) => ({ ...s, contact_phone: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+                <Button
+                  className="bg-[#003087] hover:bg-[#002266]"
+                  disabled={savingUnit}
+                  onClick={async () => {
+                    setSavingUnit(true);
+                    const res = await updateUnitSettings({
+                      unit_name: unitSettings.unit_name?.trim() || undefined,
+                      unit_number: unitSettings.unit_number?.trim() || undefined,
+                      default_drill_location: unitSettings.default_drill_location?.trim() || undefined,
+                      unit_motto: unitSettings.unit_motto?.trim() || undefined,
+                      contact_email: unitSettings.contact_email?.trim() || undefined,
+                      contact_phone: unitSettings.contact_phone?.trim() || undefined,
+                    });
+                    setSavingUnit(false);
+                    if (res?.error) toast.error(res.error);
+                    else toast.success("Unit settings saved");
+                  }}
+                >
+                  {savingUnit ? "Saving…" : "Save Unit Settings"}
+                </Button>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

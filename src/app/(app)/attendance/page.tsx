@@ -6,7 +6,7 @@ import { isStaff } from "@/lib/permissions";
 
 export default async function AttendancePage() {
   const profile = await requireProfile();
-  if (!isStaff(profile)) redirect("/dashboard");
+  if (!isStaff(profile) && !profile.is_maa) redirect("/dashboard");
 
   const supabase = await createClient();
   const [eventsRes, membersRes] = await Promise.all([
