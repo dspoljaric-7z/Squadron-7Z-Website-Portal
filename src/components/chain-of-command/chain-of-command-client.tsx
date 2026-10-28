@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { initials } from "@/lib/format";
-import { ChevronDown, Network, Pencil, Plus, Trash2, X, Save, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, GripVertical, Network, Pencil, Plus, Printer, Trash2, X, Save, Loader2 } from "lucide-react";
 import type { Billet, Profile } from "@/types/database";
 import { createBillet, updateBilletStructure, deleteBillet } from "@/app/(app)/billets/actions";
 
@@ -96,6 +97,7 @@ function ORow({ b }: { b: BilletWithHolder }) {
 
 // ── Connectors ─────────────────────────────────────────────────────────────────
 function VLine() { return <div className="mx-auto h-5 w-px bg-gray-200" />; }
+function HLine() { return <div className="h-px w-full bg-gray-200" />; }
 
 // ── ALPO column: ALPO node → DPOs (each with their ADPO) ─────────────────────
 function AlpoColumn({
@@ -128,6 +130,85 @@ function AlpoColumn({
             })}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Cadet chain: advisory → LPO → [Ops PO] → ALPO columns → MAA ──────────────
+function CadetChain({
+  advisory, lpo, opsPo, alpos, maaBillets, childMap, sectionRoots,
+}: {
+  advisory: BilletWithHolder[];
+  lpo: BilletWithHolder | undefined;
+  opsPo?: BilletWithHolder;
+  alpos: BilletWithHolder[];
+  maaBillets: BilletWithHolder[];
+  childMap: Map<string | null, BilletWithHolder[]>;
+  sectionRoots: (section: string) => BilletWithHolder[];
+}) {
+  return (
+    <div className="flex flex-col items-center px-8 py-6 gap-0">
+      {/* Advisory */}
+      {advisory.map((b) => (
+        <div key={b.id} className="flex flex-col items-center">
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-5 py-2.5 text-center">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{b.name}</p>
+            <p className="text-[8px] italic text-gray-300">advisory — outside chain</p>
+            <p className="mt-1 text-xs font-semibold text-gray-700">{b.holder?.full_name ?? "Vacant"}</p>
+            {b.holder?.rank && <p className="text-[10px] font-bold text-[#B8860B]">{b.holder.rank}</p>}
+          </div>
+          <VLine />
+        </div>
+      ))}
+
+      {/* LPO */}
+      {lpo && (
+        <div className="flex flex-col items-center">
+          <Node b={lpo} size="lg" />
+          {(opsPo || alpos.length > 0) && <VLine />}
+        </div>
+      )}
+
+      {/* Ops PO intermediate level (reports to LPO, ALPOs report to Ops PO) */}
+      {opsPo && (
+        <div className="flex flex-col items-center">
+          <Node b={opsPo} size="lg" />
+          {alpos.length > 0 && <VLine />}
+        </div>
+      )}
+
+      {/* ALPOs — each as a column with its DPOs/ADPOs */}
+      {alpos.length > 0 && (
+        <div className="flex items-start gap-6">
+          {alpos.map((alpo) => (
+            <AlpoColumn key={alpo.id} alpo={alpo} childMap={childMap} />
+          ))}
+        </div>
+      )}
+
+      {/* MAA chain */}
+      {maaBillets.length > 0 && (
+        <div className="mt-4 flex flex-col items-center border-t border-gray-100 pt-4 w-full">
+          <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-gray-400">Master-at-Arms</p>
+          {sectionRoots("maa").map((maa) => (
+            <div key={maa.id} className="flex flex-col items-center">
+              <Node b={maa} size="md" />
+              {(childMap.get(maa.id) ?? []).map((amaa) => (
+                <div key={amaa.id} className="flex flex-col items-center">
+                  <VLine />
+                  <Node b={amaa} size="sm" />
+                  {(childMap.get(amaa.id) ?? []).map((aamaa) => (
+                    <div key={aamaa.id} className="flex flex-col items-center">
+                      <VLine />
+                      <Node b={aamaa} size="sm" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -210,6 +291,107 @@ function TreeRow({
   );
 }
 
+// ── Drag-and-drop move planning ────────────────────────────────────────────────
+type DropMode = "child" | "before" | "after";
+
+type BilletMove = {
+  dragId: string;
+  newParent: string | null;
+  sortOrders: { id: string; sort_order: number }[];
+};
+
+const parentIdOf = (b: BilletWithHolder) => b.parent_billet_id ?? null;
+
+function descendantIds(billets: BilletWithHolder[], id: string): Set<string> {
+  const ids = new Set<string>();
+  const walk = (parentId: string) => {
+    for (const b of billets) {
+      if (parentIdOf(b) === parentId) {
+        ids.add(b.id);
+        walk(b.id);
+      }
+    }
+  };
+  walk(id);
+  return ids;
+}
+
+function orderedSiblings(billets: BilletWithHolder[], parentId: string | null, excludeId: string) {
+  return billets
+    .filter((b) => parentIdOf(b) === parentId && b.id !== excludeId)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+function planMove(
+  billets: BilletWithHolder[],
+  dragId: string,
+  targetId: string | null,
+  mode: DropMode,
+): BilletMove | { error: string } {
+  const dragged = billets.find((b) => b.id === dragId);
+  if (!dragged) return { error: "Billet not found." };
+
+  const descendants = descendantIds(billets, dragId);
+
+  if (targetId === null) {
+    const roots = orderedSiblings(billets, null, dragId);
+    const head = roots[0];
+    return {
+      dragId,
+      newParent: null,
+      sortOrders: [{ id: dragId, sort_order: head ? head.sort_order - 10 : 10 }],
+    };
+  }
+
+  const target = billets.find((b) => b.id === targetId);
+  if (!target) return { error: "Billet not found." };
+  if (targetId === dragId || descendants.has(targetId)) {
+    return { error: "A billet cannot be moved inside itself." };
+  }
+
+  if (mode === "child") {
+    const children = orderedSiblings(billets, targetId, dragId);
+    const last = children[children.length - 1];
+    return {
+      dragId,
+      newParent: targetId,
+      sortOrders: [{ id: dragId, sort_order: last ? last.sort_order + 10 : 10 }],
+    };
+  }
+
+  const newParent = parentIdOf(target);
+  if (newParent === dragId || (newParent !== null && descendants.has(newParent))) {
+    return { error: "A billet cannot be moved inside itself." };
+  }
+
+  const siblings = orderedSiblings(billets, newParent, dragId);
+  const index = siblings.findIndex((b) => b.id === targetId);
+  const slot = mode === "before" ? index : index + 1;
+  const above = siblings[slot - 1];
+  const below = siblings[slot];
+
+  if (above && below) {
+    if (below.sort_order - above.sort_order > 1) {
+      return {
+        dragId,
+        newParent,
+        sortOrders: [{ id: dragId, sort_order: Math.round((above.sort_order + below.sort_order) / 2) }],
+      };
+    }
+    // No integer left between the neighbours — renumber this branch in tens.
+    const sequence = [...siblings];
+    sequence.splice(slot, 0, dragged);
+    return {
+      dragId,
+      newParent,
+      sortOrders: sequence.map((b, i) => ({ id: b.id, sort_order: (i + 1) * 10 })),
+    };
+  }
+
+  const sort_order = below ? below.sort_order - 10 : above ? above.sort_order + 10 : 10;
+  return { dragId, newParent, sortOrders: [{ id: dragId, sort_order }] };
+}
+
 // ── Manage Structure tab ───────────────────────────────────────────────────────
 const ORG_SECTIONS = ["officer", "cadet", "maa"] as const;
 
@@ -220,10 +402,14 @@ function ManageTab({
   billets: BilletWithHolder[];
   onRefresh: () => void;
 }) {
+  const [rows, setRows]               = useState<BilletWithHolder[]>(billets);
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [addingParentId, setAddingParentId] = useState<string | null>("root");
   const [showAddRoot, setShowAddRoot] = useState(false);
   const [isPending, startTransition]  = useTransition();
+  const [dragId, setDragId]           = useState<string | null>(null);
+  const [dropTarget, setDropTarget]   = useState<{ id: string; mode: DropMode } | null>(null);
+  const [rootHover, setRootHover]     = useState(false);
 
   const [editForm, setEditForm] = useState<{
     name: string; parent_billet_id: string; org_section: string; sort_order: string; is_advisory: boolean;
@@ -235,8 +421,69 @@ function ManageTab({
     description: string; duties: string; prerequisites: string;
   }>({ name: "", org_section: "cadet", sort_order: "999", is_advisory: false, description: "", duties: "", prerequisites: "" });
 
-  const childMap = buildChildMap(billets);
-  const idMap = Object.fromEntries(billets.map((b) => [b.id, b]));
+  const childMap = buildChildMap(rows);
+  const idMap = Object.fromEntries(rows.map((b) => [b.id, b]));
+
+  const clearDrag = () => {
+    setDragId(null);
+    setDropTarget(null);
+    setRootHover(false);
+  };
+
+  const applyMove = async (move: BilletMove) => {
+    const previous = rows;
+    setRows((current) =>
+      current.map((b) => {
+        const next = move.sortOrders.find((s) => s.id === b.id);
+        if (!next) return b;
+        return b.id === move.dragId
+          ? { ...b, parent_billet_id: move.newParent, sort_order: next.sort_order }
+          : { ...b, sort_order: next.sort_order };
+      }),
+    );
+
+    const patches = move.sortOrders.filter(({ id, sort_order }) => {
+      if (id === move.dragId) return true;
+      const before = previous.find((b) => b.id === id);
+      return !!before && before.sort_order !== sort_order;
+    });
+
+    const results = await Promise.all(
+      patches.map(({ id, sort_order }) =>
+        updateBilletStructure(id, id === move.dragId ? { parent_billet_id: move.newParent, sort_order } : { sort_order }),
+      ),
+    );
+
+    for (const res of results) {
+      if (res && "error" in res && res.error) {
+        setRows(previous);
+        toast.error(res.error);
+        return;
+      }
+    }
+  };
+
+  const dropOn = (targetId: string | null, mode: DropMode) => {
+    const id = dragId;
+    clearDrag();
+    if (!id) return;
+    const move = planMove(rows, id, targetId, mode);
+    if ("error" in move) {
+      toast.error(move.error);
+      return;
+    }
+    void applyMove(move);
+  };
+
+  const handleRowDragOver = (e: DragEvent<HTMLDivElement>, b: BilletWithHolder) => {
+    if (!dragId || dragId === b.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientY - rect.top) / rect.height;
+    const mode: DropMode = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "child";
+    setDropTarget((prev) => (prev?.id === b.id && prev.mode === mode ? prev : { id: b.id, mode }));
+  };
 
   const startEdit = (b: BilletWithHolder) => {
     setEditingId(b.id);
@@ -338,7 +585,7 @@ function ManageTab({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Reports To</label>
                 <select className="mt-0.5 w-full rounded border border-gray-200 px-2 py-1 text-xs" value={editForm.parent_billet_id} onChange={(e) => setEditForm((f) => ({ ...f, parent_billet_id: e.target.value }))}>
                   <option value="">(no parent — root)</option>
-                  {billets.filter((x) => x.id !== b.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  {rows.filter((x) => x.id !== b.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                 </select>
               </div>
             </div>
@@ -370,7 +617,43 @@ function ManageTab({
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 group" style={{ paddingLeft: indent + 8 }}>
+          <div
+            className={`relative flex items-center gap-2 rounded-lg px-2 py-1.5 group transition-colors ${
+              dropTarget?.id === b.id && dropTarget.mode === "child"
+                ? "bg-blue-50 ring-2 ring-blue-400"
+                : "hover:bg-gray-50"
+            } ${dragId === b.id ? "opacity-40" : ""}`}
+            style={{ paddingLeft: indent + 8 }}
+            onDragOver={(e) => handleRowDragOver(e, b)}
+            onDragLeave={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && e.currentTarget.contains(next)) return;
+              setDropTarget((prev) => (prev?.id === b.id ? null : prev));
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              dropOn(b.id, dropTarget?.id === b.id ? dropTarget.mode : "child");
+            }}
+          >
+            {dropTarget?.id === b.id && dropTarget.mode === "before" && (
+              <div className="pointer-events-none absolute inset-x-2 -top-px h-0.5 rounded-full bg-blue-500" />
+            )}
+            {dropTarget?.id === b.id && dropTarget.mode === "after" && (
+              <div className="pointer-events-none absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-blue-500" />
+            )}
+            <span
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", b.id);
+                setDragId(b.id);
+              }}
+              onDragEnd={clearDrag}
+              className="shrink-0 cursor-grab rounded p-0.5 text-gray-300 opacity-0 transition-opacity hover:text-gray-500 active:cursor-grabbing group-hover:opacity-100"
+              title="Drag to move"
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </span>
             <Av h={b.holder} size="sm" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -411,7 +694,7 @@ function ManageTab({
             onSave={() => saveAdd(b.id)}
             onCancel={() => setAddingParentId(null)}
             isPending={isPending}
-            billets={billets}
+            billets={rows}
           />
         )}
 
@@ -427,7 +710,7 @@ function ManageTab({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{billets.length} total billets — edit parent/sort order to reorganize</p>
+        <p className="text-xs text-gray-500">{rows.length} total billets — drag the grip handle to reparent or reorder</p>
         <button
           onClick={() => { setShowAddRoot(true); setAddForm({ name: "", org_section: "cadet", sort_order: "999", is_advisory: false, description: "", duties: "", prerequisites: "" }); }}
           className="flex items-center gap-1.5 rounded-lg border border-dashed border-[#003087]/40 px-3 py-1.5 text-xs font-medium text-[#003087] hover:bg-[#003087]/5"
@@ -444,17 +727,43 @@ function ManageTab({
           onSave={() => saveAdd(null)}
           onCancel={() => setShowAddRoot(false)}
           isPending={isPending}
-          billets={billets}
+          billets={rows}
         />
       )}
 
-      <div className="rounded-xl border bg-white shadow-sm divide-y divide-gray-50">
-        {roots.map((b) => <ManageRow key={b.id} b={b} />)}
-        {roots.length === 0 && (
-          <p className="p-4 text-center text-sm italic text-gray-400">
-            No billets yet — run the SQL migration first, then click &quot;New root billet&quot; to add.
-          </p>
-        )}
+      <div className="rounded-xl border bg-white shadow-sm">
+        <div
+          onDragOver={(e) => {
+            if (!dragId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setRootHover(true);
+          }}
+          onDragLeave={(e) => {
+            const next = e.relatedTarget as Node | null;
+            if (next && e.currentTarget.contains(next)) return;
+            setRootHover(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            dropOn(null, "child");
+          }}
+          className={`m-2 rounded-lg border border-dashed px-3 py-2 text-center text-xs transition-colors ${
+            rootHover
+              ? "border-blue-400 bg-blue-50 font-semibold text-blue-700 ring-2 ring-blue-300"
+              : "border-gray-200 text-gray-400"
+          } ${dragId ? "" : "opacity-70"}`}
+        >
+          Drop here to make root
+        </div>
+        <div className="divide-y divide-gray-50">
+          {roots.map((b) => <ManageRow key={b.id} b={b} />)}
+          {roots.length === 0 && (
+            <p className="p-4 text-center text-sm italic text-gray-400">
+              No billets yet — run the SQL migration first, then click &quot;New root billet&quot; to add.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -516,13 +825,21 @@ function AddForm({
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-type Tab = "org" | "directory" | "manage";
+type Tab = "officers_org" | "ops_org" | "full_org" | "directory" | "manage";
+
+const TAB_LABELS: Record<Tab, string> = {
+  officers_org: "Officers",
+  ops_org: "Operations",
+  full_org: "Full Staff",
+  directory: "Billet Directory",
+  manage: "Manage Structure",
+};
 
 export function ChainOfCommandClient({
   billets: initialBillets,
   profiles,
   profile,
-  defaultTab = "org",
+  defaultTab = "full_org",
 }: {
   billets: Billet[];
   profiles: ProfileSnippet[];
@@ -530,9 +847,11 @@ export function ChainOfCommandClient({
   defaultTab?: string;
 }) {
   const router = useRouter();
-  const isOfficer = profile?.role === "officer";
-  const validTabs: Tab[] = isOfficer ? ["org", "directory", "manage"] : ["org", "directory"];
-  const initTab = validTabs.includes(defaultTab as Tab) ? (defaultTab as Tab) : "org";
+  const canManageStructure = profile?.role === "officer" || profile?.role === "snco";
+  const validTabs: Tab[] = canManageStructure
+    ? ["full_org", "officers_org", "ops_org", "directory", "manage"]
+    : ["full_org", "officers_org", "ops_org", "directory"];
+  const initTab = validTabs.includes(defaultTab as Tab) ? (defaultTab as Tab) : "officers_org";
   const [tab, setTab]         = useState<Tab>(initTab);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const billets = initialBillets;
@@ -569,9 +888,20 @@ export function ChainOfCommandClient({
   const xo    = co ? (childMap.get(co.id) ?? [])[0] : undefined;
   const staff = xo ? childMap.get(xo.id) ?? [] : [];
 
+  // Officers not reachable through the CO → XO → staff chain
+  const officerChainIds = new Set<string>([
+    ...(co ? [co.id] : []),
+    ...(xo ? [xo.id] : []),
+    ...staff.map((b) => b.id),
+  ]);
+  const otherOfficers = officerBillets.filter((b) => !officerChainIds.has(b.id));
+
   // Cadet chain: lpo is root cadet billet (first root cadet, not advisory)
-  const lpo  = cadetRoot[0];
-  const alpos = lpo ? (childMap.get(lpo.id) ?? []) : [];
+  const lpo = cadetRoot[0];
+  const lpoChildren = lpo ? (childMap.get(lpo.id) ?? []) : [];
+  // If LPO has exactly one direct cadet child (e.g. Ops PO), treat it as an intermediate level
+  const opsPo = lpoChildren.length === 1 ? lpoChildren[0] : undefined;
+  const alpos = opsPo ? (childMap.get(opsPo.id) ?? []) : lpoChildren;
 
   // Directories
   const sectionRoots = (section: string) =>
@@ -582,9 +912,19 @@ export function ChainOfCommandClient({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Chain of Command</h1>
-        <p className="text-sm text-gray-400">{filled} of {enriched.length} billets filled</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Chain of Command</h1>
+          <p className="text-sm text-gray-400">{filled} of {enriched.length} billets filled</p>
+        </div>
+        <Link
+          href="/chain-of-command/print"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg border border-[#003087]/20 bg-white px-3 py-1.5 text-sm font-semibold text-[#003087] transition-colors hover:bg-[#003087]/5"
+        >
+          <Printer className="h-4 w-4" /> Print org chart
+        </Link>
       </div>
 
       <div className="border-b border-gray-200">
@@ -599,14 +939,14 @@ export function ChainOfCommandClient({
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
-              {t === "org" ? "Org Chart" : t === "directory" ? "Billet Directory" : "Manage Structure"}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </nav>
       </div>
 
-      {/* ── Org Chart ── */}
-      {tab === "org" && (
+      {/* ── Officers Org Chart: CO → XO → staff officers ── */}
+      {tab === "officers_org" && (
         <div className="space-y-4">
           {!migrationDone ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -615,7 +955,109 @@ export function ChainOfCommandClient({
             </div>
           ) : (
           <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-            <div className="flex min-w-max">
+            <div className="flex flex-col items-center px-8 py-8">
+              {co && <Node b={co} size="lg" />}
+              {co && xo && <VLine />}
+              {xo && <Node b={xo} size="lg" />}
+              {staff.length > 0 && (
+                <>
+                  <HLine />
+                  <div className="mt-6 flex items-start gap-6">
+                    {staff.map((b) => <Node key={b.id} b={b} size="md" />)}
+                  </div>
+                </>
+              )}
+              {otherOfficers.length > 0 && (
+                <div className="mt-6 w-full border-t border-gray-100 pt-4">
+                  <p className="mb-3 text-center text-[9px] font-bold uppercase tracking-widest text-gray-400">Other Officers</p>
+                  <div className="flex flex-wrap items-start justify-center gap-6">
+                    {otherOfficers.map((b) => <Node key={b.id} b={b} size="md" />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-white px-4 py-2.5 text-xs text-gray-500">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Rank</span>
+            {[
+              { label: "Officer", cls: "bg-[#B8860B]" },
+              { label: "SNCO",    cls: "bg-purple-600" },
+              { label: "NCO",     cls: "bg-amber-500"  },
+              { label: "Cadet",   cls: "bg-[#003087]"  },
+            ].map(({ label, cls }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <div className={`h-3 w-3 rounded-full ${cls}`} />
+                <span>{label}</span>
+              </div>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="h-3 w-3 rounded-full border border-dashed border-gray-300 bg-gray-100" />
+              <span>Vacant</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Operations Org Chart: cadet chain + Master-at-Arms ── */}
+      {tab === "ops_org" && (
+        <div className="space-y-4">
+          {!migrationDone ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold mb-1">SQL migration required</p>
+              <p>Run the migration in your Supabase SQL editor to enable the dynamic org chart. Go to Manage Structure for instructions.</p>
+            </div>
+          ) : (
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+            <div className="w-max">
+              <CadetChain
+                advisory={cadetAdvisory}
+                lpo={lpo}
+                opsPo={opsPo}
+                alpos={alpos}
+                maaBillets={maaBillets}
+                childMap={childMap}
+                sectionRoots={sectionRoots}
+              />
+            </div>
+          </div>
+          )}
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-white px-4 py-2.5 text-xs text-gray-500">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Rank</span>
+            {[
+              { label: "Officer", cls: "bg-[#B8860B]" },
+              { label: "SNCO",    cls: "bg-purple-600" },
+              { label: "NCO",     cls: "bg-amber-500"  },
+              { label: "Cadet",   cls: "bg-[#003087]"  },
+            ].map(({ label, cls }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <div className={`h-3 w-3 rounded-full ${cls}`} />
+                <span>{label}</span>
+              </div>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="h-3 w-3 rounded-full border border-dashed border-gray-300 bg-gray-100" />
+              <span>Vacant</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Full Staff Org Chart: officers + cadet chain ── */}
+      {tab === "full_org" && (
+        <div className="space-y-4">
+          {!migrationDone ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold mb-1">SQL migration required</p>
+              <p>Run the migration in your Supabase SQL editor to enable the dynamic org chart. Go to Manage Structure for instructions.</p>
+            </div>
+          ) : (
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+            <div className="flex w-max">
               {/* LEFT: Unit Officers */}
               <div className="w-52 shrink-0 border-r border-gray-100 p-5">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#003087]">Unit Officers</p>
@@ -643,69 +1085,22 @@ export function ChainOfCommandClient({
                     {staff.map((b) => <ORow key={b.id} b={b} />)}
                   </div>
                 )}
-                {officerBillets.filter((b) => !co && !xo && !staff.includes(b)).length > 0 && (
+                {otherOfficers.length > 0 && (
                   <div className="border-t border-gray-100 pt-3">
-                    {officerBillets.map((b) => <ORow key={b.id} b={b} />)}
+                    {otherOfficers.map((b) => <ORow key={b.id} b={b} />)}
                   </div>
                 )}
               </div>
 
-              {/* RIGHT: Cadet Chain */}
-              <div className="flex flex-1 flex-col items-center px-8 py-6 gap-0">
-                {/* Advisory */}
-                {cadetAdvisory.map((b) => (
-                  <div key={b.id} className="flex flex-col items-center">
-                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-5 py-2.5 text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{b.name}</p>
-                      <p className="text-[8px] italic text-gray-300">advisory — outside chain</p>
-                      <p className="mt-1 text-xs font-semibold text-gray-700">{b.holder?.full_name ?? "Vacant"}</p>
-                      {b.holder?.rank && <p className="text-[10px] font-bold text-[#B8860B]">{b.holder.rank}</p>}
-                    </div>
-                    <VLine />
-                  </div>
-                ))}
-
-                {/* LPO */}
-                {lpo && (
-                  <div className="flex flex-col items-center">
-                    <Node b={lpo} size="lg" />
-                    {alpos.length > 0 && <VLine />}
-                  </div>
-                )}
-
-                {/* ALPOs — each as a column with its DPOs/ADPOs */}
-                {alpos.length > 0 && (
-                  <div className="flex items-start gap-6">
-                    {alpos.map((alpo) => (
-                      <AlpoColumn key={alpo.id} alpo={alpo} childMap={childMap} />
-                    ))}
-                  </div>
-                )}
-
-                {/* MAA chain */}
-                {maaBillets.length > 0 && (
-                  <div className="mt-4 flex flex-col items-center border-t border-gray-100 pt-4 w-full">
-                    <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-gray-400">Master-at-Arms</p>
-                    {sectionRoots("maa").map((maa) => (
-                      <div key={maa.id} className="flex flex-col items-center">
-                        <Node b={maa} size="md" />
-                        {(childMap.get(maa.id) ?? []).map((amaa) => (
-                          <div key={amaa.id} className="flex flex-col items-center">
-                            <VLine />
-                            <Node b={amaa} size="sm" />
-                            {(childMap.get(amaa.id) ?? []).map((aamaa) => (
-                              <div key={aamaa.id} className="flex flex-col items-center">
-                                <VLine />
-                                <Node b={aamaa} size="sm" />
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <CadetChain
+                advisory={cadetAdvisory}
+                lpo={lpo}
+                opsPo={opsPo}
+                alpos={alpos}
+                maaBillets={maaBillets}
+                childMap={childMap}
+                sectionRoots={sectionRoots}
+              />
             </div>
           </div>
           )}
@@ -762,8 +1157,8 @@ export function ChainOfCommandClient({
         </div>
       )}
 
-      {/* ── Manage Structure (officers only) ── */}
-      {tab === "manage" && isOfficer && (
+      {/* ── Manage Structure (officers + SNCO) ── */}
+      {tab === "manage" && canManageStructure && (
         <ManageTab
           billets={enriched}
           onRefresh={() => window.location.reload()}
