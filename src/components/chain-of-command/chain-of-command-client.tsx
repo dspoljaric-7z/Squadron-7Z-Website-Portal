@@ -135,6 +135,30 @@ function AlpoColumn({
   );
 }
 
+// ── Support billet grouper ────────────────────────────────────────────────────
+function groupSupportBillets(billets: BilletWithHolder[]): { label: string; items: BilletWithHolder[] }[] {
+  const patterns = [
+    { label: "Corpsman",    test: (n: string) => n.toLowerCase().includes("corpsman") },
+    { label: "Supply",      test: (n: string) => n.toLowerCase().includes("supply") },
+    { label: "PFT",         test: (n: string) => n.toLowerCase().includes("pft") },
+    { label: "Training",    test: (n: string) => n.toLowerCase().includes("training") },
+    { label: "Yeoman",      test: (n: string) => n.toLowerCase().includes("yeoman") },
+    { label: "Color Guard", test: (n: string) => n.toLowerCase().includes("color guard") },
+  ];
+  const used = new Set<string>();
+  const groups: { label: string; items: BilletWithHolder[] }[] = [];
+  for (const { label, test } of patterns) {
+    const matched = billets.filter((b) => test(b.name) && !used.has(b.id));
+    if (matched.length > 0) {
+      groups.push({ label, items: matched });
+      matched.forEach((b) => used.add(b.id));
+    }
+  }
+  const remaining = billets.filter((b) => !used.has(b.id));
+  if (remaining.length > 0) groups.push({ label: "Other", items: remaining });
+  return groups;
+}
+
 // ── Cadet chain: advisory → LPO → [Ops PO] → ALPO columns → MAA ──────────────
 function CadetChain({
   advisory, lpo, opsPo, alpos, maaBillets, childMap, sectionRoots,
@@ -830,7 +854,7 @@ type Tab = "officers_org" | "ops_org" | "full_org" | "directory" | "manage";
 const TAB_LABELS: Record<Tab, string> = {
   officers_org: "Officers",
   ops_org: "Operations",
-  full_org: "Full Staff",
+  full_org: "Division Organization",
   directory: "Billet Directory",
   manage: "Manage Structure",
 };
@@ -901,7 +925,13 @@ export function ChainOfCommandClient({
   const lpoChildren = lpo ? (childMap.get(lpo.id) ?? []) : [];
   // If LPO has exactly one direct cadet child (e.g. Ops PO), treat it as an intermediate level
   const opsPo = lpoChildren.length === 1 ? lpoChildren[0] : undefined;
-  const alpos = opsPo ? (childMap.get(opsPo.id) ?? []) : lpoChildren;
+  const opsPoChildren = opsPo ? (childMap.get(opsPo.id) ?? []) : lpoChildren;
+  // Split: ALPOs have their own children (DPOs); support billets are leaf nodes
+  const alpos = opsPoChildren.filter((b) => (childMap.get(b.id) ?? []).length > 0);
+  const supportBillets = opsPoChildren.filter((b) => (childMap.get(b.id) ?? []).length === 0);
+  // For Division Org tab
+  const commandChief = officerBillets.find((b) => b.name.toLowerCase().includes("command chief"));
+  const maaRoot = maaBillets.find((b) => !b.parent_billet_id);
 
   // Directories
   const sectionRoots = (section: string) =>
@@ -1001,7 +1031,7 @@ export function ChainOfCommandClient({
         </div>
       )}
 
-      {/* ── Operations Org Chart: cadet chain + Master-at-Arms ── */}
+      {/* ── Operations Org Chart: LPO → Ops PO → stacked support billets ── */}
       {tab === "ops_org" && (
         <div className="space-y-4">
           {!migrationDone ? (
@@ -1011,16 +1041,47 @@ export function ChainOfCommandClient({
             </div>
           ) : (
           <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-            <div className="w-max">
-              <CadetChain
-                advisory={cadetAdvisory}
-                lpo={lpo}
-                opsPo={opsPo}
-                alpos={alpos}
-                maaBillets={maaBillets}
-                childMap={childMap}
-                sectionRoots={sectionRoots}
-              />
+            <div className="w-max flex flex-col items-center px-8 py-6 gap-0">
+              {lpo && (
+                <div className="flex flex-col items-center">
+                  <Node b={lpo} size="lg" />
+                  {opsPo && <VLine />}
+                </div>
+              )}
+              {opsPo && (
+                <div className="flex flex-col items-center">
+                  <Node b={opsPo} size="lg" />
+                  {supportBillets.length > 0 && <VLine />}
+                </div>
+              )}
+              {supportBillets.length > 0 && (
+                <div className="flex items-start gap-8">
+                  {groupSupportBillets(supportBillets).map((group) => (
+                    <div key={group.label} className="flex flex-col items-center gap-2">
+                      <p className="text-[8px] font-bold uppercase tracking-wider text-gray-300">{group.label}</p>
+                      {group.items.map((b) => (
+                        <div key={b.id}><Node b={b} size="sm" /></div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {maaBillets.length > 0 && (
+                <div className="mt-4 flex flex-col items-center border-t border-gray-100 pt-4 w-full">
+                  <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-gray-400">Master-at-Arms</p>
+                  {sectionRoots("maa").map((maa) => (
+                    <div key={maa.id} className="flex flex-col items-center">
+                      <Node b={maa} size="md" />
+                      {(childMap.get(maa.id) ?? []).map((amaa) => (
+                        <div key={amaa.id} className="flex flex-col items-center">
+                          <VLine />
+                          <Node b={amaa} size="sm" />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           )}
@@ -1047,7 +1108,7 @@ export function ChainOfCommandClient({
         </div>
       )}
 
-      {/* ── Full Staff Org Chart: officers + cadet chain ── */}
+      {/* ── Division Organization: LPO (+ advisory Chief) → Ops PO / ALPOs / MAA ── */}
       {tab === "full_org" && (
         <div className="space-y-4">
           {!migrationDone ? (
@@ -1092,15 +1153,57 @@ export function ChainOfCommandClient({
                 )}
               </div>
 
-              <CadetChain
-                advisory={cadetAdvisory}
-                lpo={lpo}
-                opsPo={opsPo}
-                alpos={alpos}
-                maaBillets={maaBillets}
-                childMap={childMap}
-                sectionRoots={sectionRoots}
-              />
+              {/* RIGHT: Division org — LPO (+ Command Chief advisory) → Ops PO | ALPOs | MAA */}
+              <div className="flex flex-col items-center px-8 py-6 gap-0">
+                {lpo && (
+                  <div className="flex items-end gap-4 mb-0">
+                    {commandChief && (
+                      <div className="flex flex-col items-center pb-1">
+                        <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-2.5 text-center">
+                          <p className="text-[8px] italic text-gray-300">advisory</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-0.5">{commandChief.name}</p>
+                          <p className="mt-1 text-[11px] font-semibold text-gray-700">{commandChief.holder?.full_name ?? "Vacant"}</p>
+                          {commandChief.holder?.rank && <p className="text-[10px] font-bold text-[#B8860B]">{commandChief.holder.rank}</p>}
+                        </div>
+                      </div>
+                    )}
+                    <Node b={lpo} size="lg" />
+                  </div>
+                )}
+
+                <VLine />
+
+                {/* Ops PO | ALPO columns | MAA — all direct reports of LPO in this view */}
+                <div className="flex items-start gap-8">
+                  {opsPo && (
+                    <div className="flex flex-col items-center pt-1">
+                      <p className="mb-1 text-[8px] font-bold uppercase tracking-wider text-gray-300">Operations</p>
+                      <Node b={opsPo} size="md" />
+                    </div>
+                  )}
+                  {alpos.map((alpo) => (
+                    <AlpoColumn key={alpo.id} alpo={alpo} childMap={childMap} />
+                  ))}
+                  {maaRoot && (
+                    <div className="flex flex-col items-center pt-1">
+                      <p className="mb-1 text-[8px] font-bold uppercase tracking-wider text-gray-300">MAA</p>
+                      <Node b={maaRoot} size="md" bg="bg-slate-600" ring="ring-2 ring-slate-300" />
+                      {(childMap.get(maaRoot.id) ?? []).map((maa) => (
+                        <div key={maa.id} className="flex flex-col items-center">
+                          <VLine />
+                          <Node b={maa} size="sm" />
+                          {(childMap.get(maa.id) ?? []).map((amaa) => (
+                            <div key={amaa.id} className="flex flex-col items-center">
+                              <VLine />
+                              <Node b={amaa} size="sm" />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           )}
